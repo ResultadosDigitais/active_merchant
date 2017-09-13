@@ -6,6 +6,9 @@ class EbanxTest < Test::Unit::TestCase
   def setup
     @gateway = EbanxGateway.new(integration_key: 'key')
     @credit_card = credit_card
+    @token = network_tokenization_credit_card(source: :ebanx,
+      payment_cryptogram: "70d4561db7ef543509d41b5f98f8418c8cd97b718962afd91bc12bebe7f0fd37cb7058a826c3c3840bee8f9333cf7194e8ce351c6607aed650afaad4503c1332"
+    )
     @amount = 100
 
     @options = {
@@ -276,6 +279,16 @@ class EbanxTest < Test::Unit::TestCase
     assert_success response
   end
 
+  def test_successful_purchase_by_token
+    @gateway.expects(:ssl_request).returns(successful_purchase_response)
+
+    response = @gateway.purchase(@amount, @token, @options)
+    assert_success response
+
+    assert_equal '592db57ad6933455efbb62a48d1dfa091dd7cd092109db99', response.authorization
+    assert response.test?
+  end
+
   def test_failed_purchase
     @gateway.expects(:ssl_request).returns(failed_purchase_response)
 
@@ -288,6 +301,16 @@ class EbanxTest < Test::Unit::TestCase
     @gateway.expects(:ssl_request).returns(successful_authorize_response)
 
     response = @gateway.authorize(@amount, @credit_card, @options)
+    assert_success response
+
+    assert_equal '592dc02dbe421478a132bf5c2ecfe52c86ac01b454ae799b', response.authorization
+    assert response.test?
+  end
+  def test_successful_authorize_by_token
+
+    @gateway.expects(:ssl_request).returns(successful_authorize_response)
+
+    response = @gateway.authorize(@amount, @token, @options)
     assert_success response
 
     assert_equal '592dc02dbe421478a132bf5c2ecfe52c86ac01b454ae799b', response.authorization
