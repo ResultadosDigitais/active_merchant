@@ -468,6 +468,24 @@ class EbanxTest < Test::Unit::TestCase
     assert_success response
   end
 
+  def test_successful_store
+    @gateway.expects(:ssl_request).returns(successful_store_response)
+
+    response = @gateway.store(@credit_card, @options)
+    assert_success response
+
+    assert_equal '70d4561db7ef543509d41b5f98f8418c8cd97b718962afd91bc12bebe7f0fd37cb7058a826c3c3840bee8f9333cf7194e8ce351c6607aed650afaad4503c1332', response.authorization
+    assert response.test?
+  end
+
+  def test_failed_store
+    @gateway.expects(:ssl_request).returns(failed_store_response)
+
+    response = @gateway.store(@credit_card, @options)
+    assert_failure response
+    assert_equal "BP-DR-75", response.error_code
+  end
+
   private
 
   def pre_scrubbed
@@ -593,6 +611,18 @@ class EbanxTest < Test::Unit::TestCase
   def successful_purchase_with_network_token
     %(
       {"payment":{"hash":"66e45f37b6700ed7119469c774a824a006a1da0293ffd204","country":"br","merchant_payment_code":"dc2df1269619de89d72ca6c8fc1ee52a","order_number":"d17a85de6bb15444b82320a7ab0ce846","status":"CO","status_date":"2024-09-13 15:50:15","open_date":"2024-09-13 15:50:15","confirm_date":"2024-09-13 15:50:15","transfer_date":null,"amount_br":"5.85","amount_ext":"1.00","amount_iof":"0.02","currency_rate":"5.8300","currency_ext":"USD","due_date":"2024-09-16","instalments":"1","payment_type_code":"visa","details":{"billing_descriptor":"SPREEDLY"},"transaction_status":{"acquirer":"EBANX","code":"OK","description":"Accepted","authcode":"87017"},"pre_approved":true,"capture_available":false},"status":"SUCCESS"}
+    )
+  end
+
+  def successful_store_response
+    %(
+      {"status":"SUCCESS","payment_type_code":"visa","token":"70d4561db7ef543509d41b5f98f8418c8cd97b718962afd91bc12bebe7f0fd37cb7058a826c3c3840bee8f9333cf7194e8ce351c6607aed650afaad4503c1332","masked_card_number":"424242xxxxxx4242"}
+    )
+  end
+
+  def failed_store_response
+    %(
+      {"status":"ERROR","status_code":"BP-DR-75","status_message":"Card number is invalid"}
     )
   end
 end

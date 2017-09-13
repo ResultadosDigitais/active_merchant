@@ -133,6 +133,15 @@ module ActiveMerchant # :nodoc:
         true
       end
 
+      def store(credit_card, options={})
+        post = {}
+        add_integration_key(post)
+        add_operation(post)
+        add_credit_card(post, credit_card)
+        post[:country] = options[:billing_address][:country] || options[:address][:country]
+        commit(:store, post)
+      end
+
       def supports_scrubbing?
         true
       end
@@ -219,6 +228,20 @@ module ActiveMerchant # :nodoc:
         post[:payment][:merchant_payment_code] = Digest::MD5.hexdigest(order_id_override(options))
         post[:payment][:instalments] = options[:instalments] || 1
         post[:payment][:order_number] = options[:order_id][0..39] if options[:order_id]
+      end
+
+      def add_payment(post, payment)
+        add_credit_card(post[:payment], payment)
+      end
+
+      def add_credit_card(post, creditcard)
+        post[:payment_type_code] = CARD_BRAND[creditcard.brand.to_sym]
+        post[:creditcard] = {
+          card_number: creditcard.number,
+          card_name: creditcard.name,
+          card_due_date: "#{creditcard.month}/#{creditcard.year}",
+          card_cvv: creditcard.verification_value
+        }
       end
 
       def add_card_or_token(post, payment, options)
