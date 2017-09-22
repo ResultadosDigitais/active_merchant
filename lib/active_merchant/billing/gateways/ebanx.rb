@@ -13,6 +13,13 @@ module ActiveMerchant # :nodoc:
       self.display_name = 'EBANX'
 
       TAGS = ['Spreedly']
+      CARD_BRAND = {
+        visa: "visa",
+        master: "mastercard",
+        american_express: "amex",
+        discover: "discover",
+        diners_club: "diners"
+      }
 
       URL_MAP = {
         purchase: 'direct',
