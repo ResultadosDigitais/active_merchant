@@ -210,10 +210,9 @@ module ActiveMerchant # :nodoc:
 
       def add_address(post, options)
         if address = options[:billing_address] || options[:address]
-          if address[:address1].present?
-            post[:payment][:address] = address[:address1].split[1..-1].join(' ')
-            post[:payment][:street_number] = address[:address1].split.first
-          end
+          address_splitted = address_splitted_to_street_and_number(address[:address1], address[:country])
+          post[:payment][:address] = address_splitted.try(:[], :street)
+          post[:payment][:street_number] = address_splitted.try(:[], :number)
           post[:payment][:city] = address[:city]
           post[:payment][:state] = address[:state]
           post[:payment][:zipcode] = address[:zip]
@@ -411,6 +410,16 @@ module ActiveMerchant # :nodoc:
           address_name || 'Not Provided'
         else
           payment.name
+        end
+      end
+
+      def address_splitted_to_street_and_number(address, country)
+        case country.downcase
+        when 'br'
+          splitted = address.split(',').map(&:strip)
+          { street: splitted.try(:first), number: splitted.try(:last) } if splitted
+        else
+          { street: address.split[1..-1].join(" "), number: address.split.first } if address
         end
       end
     end
