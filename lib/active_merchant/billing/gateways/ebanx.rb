@@ -230,9 +230,9 @@ module ActiveMerchant # :nodoc:
       def add_invoice(post, money, options)
         post[:payment][:amount_total] = amount(money)
         post[:payment][:currency_code] = (options[:currency] || currency(money))
-        post[:payment][:merchant_payment_code] = Digest::MD5.hexdigest(order_id_override(options))
+        post[:payment][:order_number] = options[:order_id]
+        post[:payment][:merchant_payment_code] = options[:payment_unique_id]
         post[:payment][:instalments] = options[:instalments] || 1
-        post[:payment][:order_number] = options[:order_id][0..39] if options[:order_id]
       end
 
       def add_payment(post, payment)
