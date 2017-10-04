@@ -19,6 +19,11 @@ module ActiveMerchant #:nodoc:
         diners_club: "diners"
       }
 
+      CASH_PAYMENT_TYPE_CODE = {
+        oxxo: "oxxo",
+        baloto: "baloto"
+      }
+
       URL_MAP = {
         purchase: "direct",
         authorize: "direct",
@@ -171,12 +176,13 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_payment(post, payment)
+        return add_cash_payment(post, payment) if payment.is_a?(EbanxCashPayment)
         add_credit_card(post[:payment], payment)
       end
 
       def add_credit_card(post, creditcard)
         post[:payment_type_code] = CARD_BRAND[creditcard.brand.to_sym]
-        return if payment.is_a?(EbanxPaymentCash)
+        return
         return post[:creditcard] = { token: creditcard.payment_cryptogram } if creditcard.is_a?(NetworkTokenizationCreditCard)
         post[:creditcard] = {
           card_number: creditcard.number,
@@ -184,6 +190,10 @@ module ActiveMerchant #:nodoc:
           card_due_date: "#{creditcard.month}/#{creditcard.year}",
           card_cvv: creditcard.verification_value
         }
+      end
+
+      def add_cash_payment(post, payment)
+        post[:payment_type_code] = CASH_PAYMENT_TYPE_CODE[payment.type_code.to_sym]
       end
 
       def parse(body)
