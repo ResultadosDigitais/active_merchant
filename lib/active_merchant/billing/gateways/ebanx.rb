@@ -13,10 +13,15 @@ module ActiveMerchant #:nodoc:
 
       CARD_BRAND = {
         visa: "visa",
-        master: "master_card",
+        master: "mastercard",
         american_express: "amex",
         discover: "discover",
         diners_club: "diners"
+      }
+
+      CASH_PAYMENT_TYPE_CODE = {
+        oxxo: "oxxo",
+        baloto: "baloto"
       }
 
       URL_MAP = {
@@ -24,7 +29,8 @@ module ActiveMerchant #:nodoc:
         authorize: "direct",
         capture: "capture",
         refund: "refund",
-        void: "cancel"
+        void: "cancel",
+        store: "token"
       }
 
       HTTP_METHOD = {
@@ -32,7 +38,8 @@ module ActiveMerchant #:nodoc:
         authorize: :post,
         capture: :get,
         refund: :post,
-        void: :get
+        void: :get,
+        store: :post
       }
 
       def initialize(options={})
@@ -101,6 +108,15 @@ module ActiveMerchant #:nodoc:
         end
       end
 
+      def store(credit_card, options={})
+        post = {}
+        add_integration_key(post)
+        add_operation(post)
+        add_credit_card(post, credit_card)
+        post[:country] = options[:billing_address][:country] || options[:address][:country]
+        commit(:store, post)
+      end
+
       def supports_scrubbing?
         true
       end
@@ -142,8 +158,8 @@ module ActiveMerchant #:nodoc:
 
       def add_address(post, options)
         if address = options[:billing_address] || options[:address]
-          post[:payment][:address] = address[:address1].split[1..-1].join(" ") if address[:address1]
-          post[:payment][:street_number] = address[:address1].split.first if address[:address1]
+          post[:payment][:address] = address[:address1]
+          post[:payment][:street_number] = address[:address2]
           post[:payment][:city] = address[:city]
           post[:payment][:state] = address[:state]
           post[:payment][:zipcode] = address[:zip]
@@ -160,13 +176,24 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_payment(post, payment)
-        post[:payment][:payment_type_code] = CARD_BRAND[payment.brand.to_sym]
-        post[:payment][:creditcard] = {
-          card_number: payment.number,
-          card_name: payment.name,
-          card_due_date: "#{payment.month}/#{payment.year}",
-          card_cvv: payment.verification_value
+        return add_cash_payment(post, payment) if payment.is_a?(EbanxCashPayment)
+        add_credit_card(post[:payment], payment)
+      end
+
+      def add_credit_card(post, creditcard)
+        post[:payment_type_code] = CARD_BRAND[creditcard.brand.to_sym]
+        return
+        return post[:creditcard] = { token: creditcard.payment_cryptogram } if creditcard.is_a?(NetworkTokenizationCreditCard)
+        post[:creditcard] = {
+          card_number: creditcard.number,
+          card_name: creditcard.name,
+          card_due_date: "#{creditcard.month}/#{creditcard.year}",
+          card_cvv: creditcard.verification_value
         }
+      end
+
+      def add_cash_payment(post, payment)
+        post[:payment_type_code] = CASH_PAYMENT_TYPE_CODE[payment.type_code.to_sym]
       end
 
       def parse(body)
@@ -196,6 +223,8 @@ module ActiveMerchant #:nodoc:
           response.try(:[], "payment").try(:[], "status") == "PE"
         elsif action == :void
           response.try(:[], "payment").try(:[], "status") == "CA"
+        elsif action == :store
+          response.try(:[], "status") == "SUCCESS"
         else
           false
         end
@@ -207,6 +236,7 @@ module ActiveMerchant #:nodoc:
       end
 
       def authorization_from(response)
+        return response["token"] if response["token"].present?
         response.try(:[], "payment").try(:[], "hash")
       end
 
