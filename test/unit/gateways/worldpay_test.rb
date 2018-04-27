@@ -4,10 +4,9 @@ class WorldpayTest < Test::Unit::TestCase
   include CommStub
 
   def setup
-    @gateway = WorldpayGateway.new(
-      merchant_code: 'testlogin',
-      login: 'testlogin',
-      password: 'testpassword'
+   @gateway = WorldpayGateway.new(
+      :login => 'testlogin',
+      :password => 'testpassword'
     )
 
     @amount = 100
@@ -1258,10 +1257,10 @@ class WorldpayTest < Test::Unit::TestCase
     ActiveMerchant::Billing::Base.mode = :production
 
     @gateway = WorldpayGateway.new(
-      merchant_code: 'testlogin',
-      login: 'testlogin',
-      password: 'testpassword',
-      test: true
+      :merchant_code_login => 'testlogin',
+      :login => 'testlogin',
+      :password => 'testpassword',
+      :test => true
     )
 
     stub_comms do
