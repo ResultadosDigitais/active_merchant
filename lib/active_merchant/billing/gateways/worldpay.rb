@@ -255,7 +255,7 @@ module ActiveMerchant #:nodoc:
       def add_create_token(xml, token_event_reference, options)
         xml.tag! 'createToken' do
           xml.tag! 'tokenEventReference', token_event_reference
-          xml.tag! 'tokenReason', options[:token_reason]
+          xml.tag! 'tokenReason', options[:token_reason] if options[:token_reason].present?
         end
       end
 
@@ -330,6 +330,8 @@ module ActiveMerchant #:nodoc:
       end
 
       def commit(action, request, *success_criteria)
+        puts '*' * 100
+        p request
         xmr = ssl_post(url, request, 'Content-Type' => 'text/xml', 'Authorization' => encoded_credentials)
         raw = parse(action, xmr)
         success, message = success_and_message_from(raw, success_criteria)
