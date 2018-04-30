@@ -168,7 +168,7 @@ module ActiveMerchant #:nodoc:
               if options[:hcg_additional_data]
                 add_hcg_additional_data(xml, options)
               end
-              add_create_token(xml, options[:token_event_reference], options) if options[:token_event_reference].present?
+              add_create_token(xml, options)
             end
           end
         end
@@ -252,9 +252,9 @@ module ActiveMerchant #:nodoc:
         end
       end
 
-      def add_create_token(xml, token_event_reference, options)
+      def add_create_token(xml, options)
         xml.tag! 'createToken' do
-          xml.tag! 'tokenEventReference', token_event_reference
+          xml.tag! 'tokenEventReference', options[:token_event_reference] if options[:token_event_reference].present?
           xml.tag! 'tokenReason', options[:token_reason] if options[:token_reason].present?
         end
       end
