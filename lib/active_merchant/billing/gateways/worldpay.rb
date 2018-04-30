@@ -26,7 +26,7 @@ module ActiveMerchant #:nodoc:
       }
 
       def initialize(options = {})
-        requires!(options, :login, :password)
+        requires!(options, :login, :password, :merchant_code)
         super
       end
 
@@ -128,7 +128,7 @@ module ActiveMerchant #:nodoc:
         xml = Builder::XmlMarkup.new :indent => 2
         xml.instruct! :xml, :encoding => 'UTF-8'
         xml.declare! :DOCTYPE, :paymentService, :PUBLIC, "-//WorldPay//DTD WorldPay PaymentService v1//EN", "http://dtd.worldpay.com/paymentService_v1.dtd"
-        xml.tag! 'paymentService', 'version' => "1.4", 'merchantCode' => @options[:login] do
+        xml.tag! 'paymentService', 'version' => "1.4", 'merchantCode' => @options[:merchant_code] do
           yield xml
         end
         xml.target!
@@ -168,6 +168,7 @@ module ActiveMerchant #:nodoc:
               if options[:hcg_additional_data]
                 add_hcg_additional_data(xml, options)
               end
+              add_create_token(xml, options)
             end
           end
         end
@@ -230,16 +231,22 @@ module ActiveMerchant #:nodoc:
           end
         else
           xml.tag! 'paymentDetails', credit_fund_transfer_attribute(options) do
-            xml.tag! CARD_CODES[card_brand(payment_method)] do
-              xml.tag! 'cardNumber', payment_method.number
-              xml.tag! 'expiryDate' do
-                xml.tag! 'date', 'month' => format(payment_method.month, :two_digits), 'year' => format(payment_method.year, :four_digits)
+            if payment_method.is_a?(NetworkTokenizationCreditCard)
+              xml.tag! 'TOKEN-SSL', token_scope_attribute(options) do
+                xml.tag! 'paymentTokenID', payment_method.payment_cryptogram
               end
+            else
+              xml.tag! CARD_CODES[card_brand(payment_method)] do
+                xml.tag! 'cardNumber', payment_method.number
+                xml.tag! 'expiryDate' do
+                  xml.tag! 'date', 'month' => format(payment_method.month, :two_digits), 'year' => format(payment_method.year, :four_digits)
+                end
 
-              xml.tag! 'cardHolderName', payment_method.name
-              xml.tag! 'cvc', payment_method.verification_value
+                xml.tag! 'cardHolderName', payment_method.name
+                xml.tag! 'cvc', payment_method.verification_value
 
-              add_address(xml, (options[:billing_address] || options[:address]))
+                add_address(xml, (options[:billing_address] || options[:address]))
+              end
             end
             if options[:ip] && options[:session_id]
               xml.tag! 'session', 'shopperIPAddress' => options[:ip], 'id' => options[:session_id]
@@ -392,6 +399,16 @@ module ActiveMerchant #:nodoc:
         return 0 if non_fractional_currency?(currency)
         return 3 if three_decimal_currency?(currency)
         return 2
+      end
+
+      def add_create_token(xml, options)
+        return unless options[:create_token]
+        xml.tag! 'createToken', token_scope_attribute(options)
+      end
+
+      def token_scope_attribute(options)
+        return unless options[:token_scope]
+        { 'tokenScope' => options[:token_scope] }
       end
     end
   end
