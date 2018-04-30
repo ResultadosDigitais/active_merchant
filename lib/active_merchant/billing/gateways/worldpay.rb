@@ -253,9 +253,23 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_create_token(xml, options)
-        xml.tag! 'createToken' do
-          xml.tag! 'tokenEventReference', options[:token_event_reference] if options[:token_event_reference].present?
-          xml.tag! 'tokenReason', options[:token_reason] if options[:token_reason].present?
+        return if options[:create_token].blank?
+        create_token = options[:create_token]
+        xml.tag! 'createToken', 'tokenScope' => (create_token[:token_scope] || "shopper") do
+          xml.tag! 'tokenEventReference', create_token[:token_event_reference] if create_token[:token_event_reference].present?
+          xml.tag! 'tokenReason', create_token[:token_reason] if create_token[:token_reason].present?
+          if create_token[:token_expiry].present?
+            xml.tag! 'paymentTokenExpiry' do
+              xml.tag! 'date',
+                'dayOfMonth' => create_token[:token_expiry][:day_of_month],
+                'month' => create_token[:token_expiry][:month],
+                'year' => create_token[:token_expiry][:year],
+                'hour' => create_token[:token_expiry][:hour],
+                'minute' => create_token[:token_expiry][:minute],
+                'second' => create_token[:token_expiry][:second]
+              end
+            end
+          end
         end
       end
 
