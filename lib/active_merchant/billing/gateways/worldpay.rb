@@ -231,42 +231,28 @@ module ActiveMerchant #:nodoc:
           end
         else
           xml.tag! 'paymentDetails', credit_fund_transfer_attribute(options) do
-            xml.tag! CARD_CODES[card_brand(payment_method)] do
-              xml.tag! 'cardNumber', payment_method.number
-              xml.tag! 'expiryDate' do
-                xml.tag! 'date', 'month' => format(payment_method.month, :two_digits), 'year' => format(payment_method.year, :four_digits)
+            if payment_method.is_a?(NetworkTokenizationCreditCard)
+              xml.tag! 'TOKEN-SSL', token_scope_attribute(options) do
+                xml.tag! 'paymentTokenID', payment_method.payment_cryptogram
               end
+            else
+              xml.tag! CARD_CODES[card_brand(payment_method)] do
+                xml.tag! 'cardNumber', payment_method.number
+                xml.tag! 'expiryDate' do
+                  xml.tag! 'date', 'month' => format(payment_method.month, :two_digits), 'year' => format(payment_method.year, :four_digits)
+                end
 
-              xml.tag! 'cardHolderName', payment_method.name
-              xml.tag! 'cvc', payment_method.verification_value
+                xml.tag! 'cardHolderName', payment_method.name
+                xml.tag! 'cvc', payment_method.verification_value
 
-              add_address(xml, (options[:billing_address] || options[:address]))
+                add_address(xml, (options[:billing_address] || options[:address]))
+              end
             end
             if options[:ip] && options[:session_id]
               xml.tag! 'session', 'shopperIPAddress' => options[:ip], 'id' => options[:session_id]
             else
               xml.tag! 'session', 'shopperIPAddress' => options[:ip] if options[:ip]
               xml.tag! 'session', 'id' => options[:session_id] if options[:session_id]
-            end
-          end
-        end
-      end
-
-      def add_create_token(xml, options)
-        return if options[:create_token].blank?
-        create_token = options[:create_token]
-        xml.tag! 'createToken', 'tokenScope' => (create_token[:token_scope] || "shopper") do
-          xml.tag! 'tokenEventReference', create_token[:token_event_reference] if create_token[:token_event_reference].present?
-          xml.tag! 'tokenReason', create_token[:token_reason] if create_token[:token_reason].present?
-          if create_token[:token_expiry].present?
-            xml.tag! 'paymentTokenExpiry' do
-              xml.tag! 'date',
-                       'dayOfMonth' => create_token[:token_expiry][:day_of_month],
-                       'month' => create_token[:token_expiry][:month],
-                       'year' => create_token[:token_expiry][:year],
-                       'hour' => create_token[:token_expiry][:hour],
-                       'minute' => create_token[:token_expiry][:minute],
-                       'second' => create_token[:token_expiry][:second]
             end
           end
         end
@@ -343,8 +329,6 @@ module ActiveMerchant #:nodoc:
       end
 
       def commit(action, request, *success_criteria)
-        puts '*' * 100
-        p request
         xmr = ssl_post(url, request, 'Content-Type' => 'text/xml', 'Authorization' => encoded_credentials)
         raw = parse(action, xmr)
         success, message = success_and_message_from(raw, success_criteria)
@@ -415,6 +399,16 @@ module ActiveMerchant #:nodoc:
         return 0 if non_fractional_currency?(currency)
         return 3 if three_decimal_currency?(currency)
         return 2
+      end
+
+      def add_create_token(xml, options)
+        return unless options[:create_token]
+        xml.tag! 'createToken', token_scope_attribute(options)
+      end
+
+      def token_scope_attribute(options)
+        return unless options[:token_scope]
+        { 'tokenScope' => options[:token_scope] }
       end
     end
   end
