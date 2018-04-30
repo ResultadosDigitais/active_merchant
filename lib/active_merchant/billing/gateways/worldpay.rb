@@ -261,13 +261,12 @@ module ActiveMerchant #:nodoc:
           if create_token[:token_expiry].present?
             xml.tag! 'paymentTokenExpiry' do
               xml.tag! 'date',
-                'dayOfMonth' => create_token[:token_expiry][:day_of_month],
-                'month' => create_token[:token_expiry][:month],
-                'year' => create_token[:token_expiry][:year],
-                'hour' => create_token[:token_expiry][:hour],
-                'minute' => create_token[:token_expiry][:minute],
-                'second' => create_token[:token_expiry][:second]
-              end
+                       'dayOfMonth' => create_token[:token_expiry][:day_of_month],
+                       'month' => create_token[:token_expiry][:month],
+                       'year' => create_token[:token_expiry][:year],
+                       'hour' => create_token[:token_expiry][:hour],
+                       'minute' => create_token[:token_expiry][:minute],
+                       'second' => create_token[:token_expiry][:second]
             end
           end
         end
