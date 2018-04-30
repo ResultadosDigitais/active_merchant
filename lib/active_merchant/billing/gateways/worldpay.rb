@@ -653,74 +653,40 @@ module ActiveMerchant # :nodoc:
       end
 
       def add_payment_method(xml, amount, payment_method, options)
-        case options[:payment_type]
-        when :pay_as_order
-          add_amount_for_pay_as_order(xml, amount, payment_method, options)
-        when :encrypted_wallet
-          add_encrypted_wallet(xml, payment_method)
-        when :network_token
-          add_network_tokenization_card(xml, payment_method, options)
-        else
-          add_card_or_token(xml, payment_method, options)
-        end
-      end
-
-      def add_amount_for_pay_as_order(xml, amount, payment_method, options)
-        if options[:merchant_code]
-          xml.payAsOrder 'orderCode' => payment_method, 'merchantCode' => options[:merchant_code] do
-            add_amount(xml, amount, options)
-          end
-        else
-          xml.payAsOrder 'orderCode' => payment_method do
-            add_amount(xml, amount, options)
-          end
-        end
-      end
-
-      def add_network_tokenization_card(xml, payment_method, options)
-        source = payment_method.respond_to?(:source) ? payment_method.source : options[:wallet_type]
-        token_type = NETWORK_TOKEN_TYPE.fetch(source, 'NETWORKTOKEN')
-
-        xml.paymentDetails do
-          xml.tag! 'EMVCO_TOKEN-SSL', 'type' => token_type do
-            xml.tokenNumber payment_method.number
-            xml.expiryDate do
-              xml.date(
-                'month' => format(payment_method.month, :two_digits),
-                'year' => format(payment_method.year, :four_digits_year)
-              )
+        if payment_method.is_a?(String)
+          if options[:merchant_code]
+            xml.tag! 'payAsOrder', 'orderCode' => payment_method, 'merchantCode' => options[:merchant_code] do
+              add_amount(xml, amount, options)
             end
-            name = card_holder_name(payment_method, options)
-            xml.cardHolderName name if name.present?
-            xml.cryptogram payment_method.payment_cryptogram unless should_send_payment_cryptogram?(options, payment_method)
-            eci = eci_value(payment_method, options)
-            xml.eciIndicator eci if eci.present?
+          else
+            xml.tag! 'payAsOrder', 'orderCode' => payment_method do
+              add_amount(xml, amount, options)
+            end
           end
-          add_stored_credential_options(xml, options)
-          add_shopper_id(xml, options, false)
-          add_three_d_secure(xml, options)
-        end
-      end
-
-      def should_send_payment_cryptogram?(options, payment_method)
-        wallet_type_google_pay?(options) ||
-          (payment_method_apple_pay?(payment_method) &&
-            merchant_initiated?(options))
-      end
-
-      def merchant_initiated?(options)
-        options.dig(:stored_credential, :initiator) == 'merchant'
-      end
-
-      def add_encrypted_wallet(xml, payment_method)
-        source = encrypted_wallet_source(payment_method.source)
-
-        xml.paymentDetails do
-          xml.tag! "#{source}-SSL" do
-            if source == 'APPLEPAY'
-              add_encrypted_apple_pay(xml, payment_method)
+        else
+          xml.tag! 'paymentDetails', credit_fund_transfer_attribute(options) do
+            if payment_method.is_a?(NetworkTokenizationCreditCard)
+              xml.tag! 'TOKEN-SSL', token_scope_attribute(options) do
+                xml.tag! 'paymentTokenID', payment_method.payment_cryptogram
+              end
             else
-              add_encrypted_google_pay(xml, payment_method)
+              xml.tag! CARD_CODES[card_brand(payment_method)] do
+                xml.tag! 'cardNumber', payment_method.number
+                xml.tag! 'expiryDate' do
+                  xml.tag! 'date', 'month' => format(payment_method.month, :two_digits), 'year' => format(payment_method.year, :four_digits)
+                end
+
+                xml.tag! 'cardHolderName', payment_method.name
+                xml.tag! 'cvc', payment_method.verification_value
+
+                add_address(xml, (options[:billing_address] || options[:address]))
+              end
+            end
+            if options[:ip] && options[:session_id]
+              xml.tag! 'session', 'shopperIPAddress' => options[:ip], 'id' => options[:session_id]
+            else
+              xml.tag! 'session', 'shopperIPAddress' => options[:ip] if options[:ip]
+              xml.tag! 'session', 'id' => options[:session_id] if options[:session_id]
             end
           end
         end
@@ -1185,6 +1151,16 @@ module ActiveMerchant # :nodoc:
         return 3 if three_decimal_currency?(currency)
 
         return 2
+      end
+
+      def add_create_token(xml, options)
+        return unless options[:create_token]
+        xml.tag! 'createToken', token_scope_attribute(options)
+      end
+
+      def token_scope_attribute(options)
+        return unless options[:token_scope]
+        { 'tokenScope' => options[:token_scope] }
       end
 
       def eligible_for_0_auth?(payment_method, options = {})
