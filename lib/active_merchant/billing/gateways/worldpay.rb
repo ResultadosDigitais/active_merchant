@@ -426,6 +426,7 @@ module ActiveMerchant # :nodoc:
                   xml.shopperEmailAddress options[:email]
                 end
               end
+              add_create_token(xml, options)
             end
           end
         end
