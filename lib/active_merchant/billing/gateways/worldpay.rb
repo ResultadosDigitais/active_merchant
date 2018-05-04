@@ -345,11 +345,18 @@ module ActiveMerchant # :nodoc:
 
       def build_capture_request(money, authorization, options)
         build_order_modify_request(authorization) do |xml|
-          xml.capture do
+          xml.tag! 'capture', capture_tag_attributes(options) do
             time = Time.now
             xml.date 'dayOfMonth' => time.day, 'month' => time.month, 'year' => time.year
             add_amount(xml, money, options)
           end
+        end
+      end
+
+      def capture_tag_attributes(options)
+        attributes = {}
+        if options[:order_reference]
+          attributes.merge('reference' => options[:order_reference])
         end
       end
 
