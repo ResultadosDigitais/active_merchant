@@ -693,6 +693,14 @@ module ActiveMerchant # :nodoc:
         end
       end
 
+      def add_email(xml, options)
+        return unless options[:email]
+        xml.tag! 'shopper' do
+          xml.tag! 'shopperEmailAddress', options[:email]
+          xml.tag! 'authenticatedShopperID', options[:shopper_id] if options[:shopper_id]
+        end
+      end
+
       def add_encrypted_apple_pay(xml, payment_method)
         xml.header do
           xml.ephemeralPublicKey payment_method.payment_data.dig(:header, :ephemeralPublicKey)
