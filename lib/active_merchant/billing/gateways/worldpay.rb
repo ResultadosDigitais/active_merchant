@@ -243,17 +243,12 @@ module ActiveMerchant # :nodoc:
               add_amount(xml, money, options)
               add_order_content(xml, options)
               add_payment_method(xml, money, payment_method, options)
-              add_shopper(xml, options)
-              add_fraud_sight_data(xml, options)
-              add_statement_narrative(xml, options)
-              add_risk_data(xml, options[:risk_data]) if options[:risk_data]
-              add_sub_merchant_data(xml, options[:sub_merchant_data]) if options[:sub_merchant_data]
-              add_hcg_additional_data(xml, options) if options[:hcg_additional_data]
-              add_instalments_data(xml, options) if options[:instalments]
-              add_additional_data(xml, money, options) if options[:level_2_data] || options[:level_3_data]
-              add_moto_flag(xml, options) if options.dig(:metadata, :manual_entry)
-              add_additional_3ds_data(xml, options) if options[:execute_threed] && options[:three_ds_version] && options[:three_ds_version] =~ /^2/
-              add_3ds_exemption(xml, options) if options[:exemption_type]
+              add_email(xml, options)
+              add_instalments(xml, options)
+              if options[:hcg_additional_data]
+                add_hcg_additional_data(xml, options)
+              end
+              add_create_token(xml, options)
             end
           end
         end
@@ -701,158 +696,15 @@ module ActiveMerchant # :nodoc:
         end
       end
 
-      def add_encrypted_apple_pay(xml, payment_method)
-        xml.header do
-          xml.ephemeralPublicKey payment_method.payment_data.dig(:header, :ephemeralPublicKey)
-          xml.publicKeyHash payment_method.payment_data.dig(:header, :publicKeyHash)
-          xml.transactionId payment_method.payment_data.dig(:header, :transactionId)
-        end
-        xml.signature payment_method.payment_data[:signature]
-        xml.version payment_method.payment_data[:version]
-        xml.data payment_method.payment_data[:data]
-      end
+      def add_instalments(xml, options)
+        return unless options[:instalments]
 
-      def add_encrypted_google_pay(xml, payment_method)
-        xml.protocolVersion payment_method.payment_data[:version]
-        xml.signature payment_method.payment_data[:signature]
-        xml.signedMessage payment_method.payment_data[:signed_message]
-      end
-
-      def add_card_or_token(xml, payment_method, options)
-        xml.paymentDetails credit_fund_transfer_attribute(options) do
-          if options[:payment_type] == :token
-            add_token_details(xml, options)
-          else
-            add_card_details(xml, payment_method, options)
-          end
-          add_stored_credential_options(xml, options)
-          add_shopper_id(xml, options)
-          add_three_d_secure(xml, options)
+        xml.tag! 'thirdPartyData' do
+          xml.tag! 'instalments', options[:instalments]
         end
       end
 
-      def add_token_details(xml, options)
-        xml.tag! 'TOKEN-SSL', 'tokenScope' => options[:token_scope] do
-          xml.paymentTokenID options[:token_id]
-        end
-      end
-
-      def add_card_details(xml, payment_method, options)
-        xml.tag! 'CARD-SSL' do
-          add_card(xml, payment_method, options)
-        end
-      end
-
-      def add_shopper_id(xml, options, with_session_id = true)
-        session_params = {
-          'shopperIPAddress' => options[:ip],
-          'id' => with_session_id ? options[:session_id] : nil
-        }.compact
-
-        xml.session session_params if session_params.present?
-      end
-
-      def add_three_d_secure(xml, options)
-        return unless three_d_secure = options[:three_d_secure]
-
-        xml.info3DSecure do
-          xml.threeDSVersion three_d_secure[:version]
-          if three_d_secure[:version] && three_d_secure[:ds_transaction_id]
-            xml.dsTransactionId three_d_secure[:ds_transaction_id]
-          else
-            xml.xid three_d_secure[:xid]
-          end
-          xml.cavv three_d_secure[:cavv]
-          xml.eci three_d_secure[:eci]
-        end
-      end
-
-      def add_card(xml, payment_method, options)
-        xml.cardNumber payment_method.number
-        xml.expiryDate do
-          xml.date(
-            'month' => format(payment_method.month, :two_digits),
-            'year' => format(payment_method.year, :four_digits_year)
-          )
-        end
-        name = card_holder_name(payment_method, options)
-        xml.cardHolderName name if name.present?
-        xml.cvc payment_method.verification_value
-
-        add_address(xml, (options[:billing_address] || options[:address]), options)
-      end
-
-      def add_stored_credential_options(xml, options = {})
-        if options[:stored_credential]
-          add_stored_credential_using_normalized_fields(xml, options)
-        elsif options[:stored_credential_usage]
-          add_stored_credential_using_gateway_specific_fields(xml, options)
-        end
-      end
-
-      def add_stored_credential_using_normalized_fields(xml, options)
-        reason = case options[:stored_credential][:reason_type]
-                 when 'installment' then 'INSTALMENT'
-                 when 'recurring' then 'RECURRING'
-                 when 'unscheduled' then 'UNSCHEDULED'
-                 end
-        is_initial_transaction = options[:stored_credential][:initial_transaction]
-        stored_credential_params = generate_stored_credential_params(is_initial_transaction, reason, options[:stored_credential][:initiator])
-
-        xml.storedCredentials stored_credential_params do
-          xml.schemeTransactionIdentifier network_transaction_id(options) if send_network_transaction_id?(options)
-        end
-      end
-
-      def add_stored_credential_using_gateway_specific_fields(xml, options)
-        is_initial_transaction = options[:stored_credential_usage] == 'FIRST'
-        stored_credential_params = generate_stored_credential_params(is_initial_transaction, options[:stored_credential_initiated_reason])
-
-        xml.storedCredentials stored_credential_params do
-          xml.schemeTransactionIdentifier options[:stored_credential_transaction_id] if options[:stored_credential_transaction_id] && !is_initial_transaction
-        end
-      end
-
-      def send_network_transaction_id?(options)
-        network_transaction_id(options) && !options.dig(:stored_credential, :initial_transaction) && options.dig(:stored_credential, :initiator) != 'cardholder'
-      end
-
-      def add_shopper(xml, options)
-        return unless options[:execute_threed] || options[:email] || options[:customer]
-
-        xml.shopper do
-          xml.shopperEmailAddress options[:email] if options[:email]
-          add_authenticated_shopper_id(xml, options)
-          xml.browser do
-            xml.acceptHeader options[:accept_header]
-            xml.userAgentHeader options[:user_agent]
-          end
-        end
-      end
-
-      def add_fraud_sight_data(xml, options)
-        return unless options[:custom_string_fields].is_a?(Hash)
-
-        xml.tag! 'FraudSightData' do
-          xml.tag! 'customStringFields' do
-            options[:custom_string_fields].each do |key, value|
-              # transform custom_string_field_1 into customStringField1, etc.
-              formatted_key = key.to_s.camelize(:lower).to_sym
-              xml.tag! formatted_key, value
-            end
-          end
-        end
-      end
-
-      def add_statement_narrative(xml, options)
-        xml.statementNarrative truncate(options[:statement_narrative], 50) if options[:statement_narrative]
-      end
-
-      def add_authenticated_shopper_id(xml, options)
-        xml.authenticatedShopperID options[:customer] if options[:customer]
-      end
-
-      def add_address(xml, address, options)
+      def add_address(xml, address)
         return unless address
 
         address = address_with_defaults(address)

@@ -1174,6 +1174,20 @@ class WorldpayTest < Test::Unit::TestCase
     end.respond_with(successful_authorize_response)
   end
 
+  def test_instalments
+    stub_comms do
+      @gateway.authorize(100, @credit_card, @options.merge(instalments: '3'))
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<instalments>3</instalments>), data
+    end.respond_with(successful_authorize_response)
+
+    stub_comms do
+      @gateway.authorize(100, @credit_card, @options)
+    end.check_request do |endpoint, data, headers|
+      assert_no_match %r(instalments), data
+    end.respond_with(successful_authorize_response)
+  end
+
   def test_statement_narrative_and_truncation
     stub_comms do
       @gateway.authorize(100, @credit_card, @options.merge(statement_narrative: 'Merchant Statement Narrative The Story Of Your Purchase'))
