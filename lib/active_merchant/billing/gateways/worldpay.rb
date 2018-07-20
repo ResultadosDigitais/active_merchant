@@ -165,6 +165,7 @@ module ActiveMerchant #:nodoc:
               end
               add_payment_method(xml, money, payment_method, options)
               add_email(xml, options)
+              add_instalments(xml, options)
               if options[:hcg_additional_data]
                 add_hcg_additional_data(xml, options)
               end
@@ -270,6 +271,14 @@ module ActiveMerchant #:nodoc:
         xml.tag! 'shopper' do
           xml.tag! 'shopperEmailAddress', options[:email]
           xml.tag! 'authenticatedShopperID', options[:shopper_id] if options[:shopper_id]
+        end
+      end
+
+      def add_instalments(xml, options)
+        return unless options[:instalments]
+
+        xml.tag! 'thirdPartyData' do
+          xml.tag! 'instalments', options[:instalments]
         end
       end
 
