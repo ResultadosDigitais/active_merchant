@@ -8,13 +8,18 @@ class MaxipagoTest < Test::Unit::TestCase
     )
 
     @credit_card = credit_card
+    @token = network_tokenization_credit_card('4242424242424242',
+      source: :maxipago,
+      payment_cryptogram: "iZrWy6+PJpQ="
+    )
     @amount = 100
 
     @options = {
       :order_id => '1',
       :billing_address => address,
       :description => 'Store Purchase',
-      :installments => 3
+      :installments => 3,
+      :customer_id => "123456"
     }
   end
 
@@ -31,6 +36,22 @@ class MaxipagoTest < Test::Unit::TestCase
     @gateway.expects(:ssl_post).returns(failed_purchase_response)
 
     response = @gateway.purchase(@amount, @credit_card, @options)
+    assert_failure response
+  end
+
+  def test_successful_purchase_with_token
+    @gateway.expects(:ssl_post).returns(successful_purchase_response_with_token)
+
+    response = @gateway.purchase(@amount, @token, @options)
+    assert_success response
+
+    assert_equal '0A0104A3:0165CF0C0087:3448:06B0286F|2212519', response.authorization
+  end
+
+  def test_failed_purchase_with_token
+    @gateway.expects(:ssl_post).returns(failed_purchase_response_with_token)
+
+    response = @gateway.purchase(@amount, @token, @options.except(:customer_id))
     assert_failure response
   end
 
@@ -216,6 +237,41 @@ class MaxipagoTest < Test::Unit::TestCase
         <processorMessage>DECLINED</processorMessage>
         <errorMessage/>
       </transaction-response>
+    )
+  end
+
+  def successful_purchase_response_with_token
+    %(
+      <?xml version="1.0" encoding="UTF-8"?>
+      <transaction-response>
+        <authCode>123456</authCode>
+        <orderID>0A0104A3:0165CF0C0087:3448:06B0286F</orderID>
+        <referenceNum>1</referenceNum>
+        <transactionID>2212519</transactionID>
+        <transactionTimestamp>1536776994</transactionTimestamp>
+        <responseCode>0</responseCode>
+        <responseMessage>CAPTURED</responseMessage>
+        <avsResponseCode>YYY</avsResponseCode>
+        <cvvResponseCode>M</cvvResponseCode>
+        <processorCode>A</processorCode>
+        <processorMessage>APPROVED</processorMessage>
+        <processorName>SIMULATOR</processorName>
+        <errorMessage/>
+        <processorTransactionID>702692</processorTransactionID>
+        <processorReferenceNumber>139862</processorReferenceNumber>
+        <creditCardCountry>US</creditCardCountry>
+        <creditCardScheme>Visa</creditCardScheme>
+      </transaction-response>
+    )
+  end
+
+  def failed_purchase_response_with_token
+    %(
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <api-error>
+        <errorCode>1</errorCode>
+        <errorMsg><![CDATA[Customer id validation error.]]></errorMsg>
+      </api-error>
     )
   end
 
