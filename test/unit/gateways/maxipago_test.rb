@@ -11,14 +11,12 @@ class MaxipagoTest < Test::Unit::TestCase
     @amount = 100
 
     @options = {
-      order_id: '1',
-      billing_address: address,
-      description: 'Store Purchase',
-      installments: 3,
-      email: 'example@test.com',
-      customer_id_ext: '123456',
-      first_name: 'John',
-      last_name: 'White'
+      :order_id => '1',
+      :billing_address => address,
+      :description => 'Store Purchase',
+      :installments => 3,
+      :customer_token => '154676',
+      :expiration_date => '01/01/9999'
     }
   end
 
@@ -29,6 +27,8 @@ class MaxipagoTest < Test::Unit::TestCase
     assert_success response
 
     assert_equal '123456789|123456789', response.authorization
+    assert_equal 'iZrWy6+PJpQ=', response.params["token"]
+    assert_equal '4242********4242', response.params["credit_card_number"]
   end
 
   def test_failed_purchase
@@ -45,6 +45,9 @@ class MaxipagoTest < Test::Unit::TestCase
     assert_success response
 
     assert_equal 'C0A8013F:014455FCC857:91A0:01A7243E|663921', response.authorization
+    assert_equal 'iZrWy6+PJpQ=', response.params["token"]
+    assert_equal '4242********4242', response.params["credit_card_number"]
+
     assert response.test?
   end
 
@@ -215,6 +218,12 @@ class MaxipagoTest < Test::Unit::TestCase
         <processorTransactionID>123456789</processorTransactionID>
         <processorReferenceNumber>123456789</processorReferenceNumber>
         <fraudScore>29</fraudScore>
+        <creditCardCountry>US</creditCardCountry>
+        <creditCardScheme>Visa</creditCardScheme>
+        <save-on-file>
+          <token>iZrWy6+PJpQ=</token>
+          <creditCardNumber>4242********4242</creditCardNumber>
+        </save-on-file>
       </transaction-response>
     )
   end
@@ -254,6 +263,12 @@ class MaxipagoTest < Test::Unit::TestCase
         <processorCode>A</processorCode>
         <processorMessage>APPROVED</processorMessage>
         <errorMessage/>
+        <creditCardCountry>US</creditCardCountry>
+        <creditCardScheme>Visa</creditCardScheme>
+        <save-on-file>
+          <token>iZrWy6+PJpQ=</token>
+          <creditCardNumber>4242********4242</creditCardNumber>
+        </save-on-file>
       </transaction-response>
     )
   end
