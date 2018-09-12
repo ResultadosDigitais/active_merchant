@@ -5,8 +5,8 @@ module ActiveMerchant #:nodoc:
     class MaxipagoGateway < Gateway
       API_VERSION = '3.1.1.15'
 
-      self.live_url = 'https://api.maxipago.net/UniversalAPI'
-      self.test_url = 'https://testapi.maxipago.net/UniversalAPI'
+      self.live_url = 'https://api.maxipago.net/UniversalAPI/postXML'
+      self.test_url = 'https://testapi.maxipago.net/UniversalAPI/postXML'
 
       self.supported_countries = ['BR']
       self.default_currency = 'BRL'
@@ -21,19 +21,19 @@ module ActiveMerchant #:nodoc:
       end
 
       def purchase(money, creditcard, options = {})
-        commit_transaction(:sale) do |xml|
+        commit(:sale) do |xml|
           add_auth_purchase(xml, money, creditcard, options)
         end
       end
 
       def authorize(money, creditcard, options = {})
-        commit_transaction(:auth) do |xml|
+        commit(:auth) do |xml|
           add_auth_purchase(xml, money, creditcard, options)
         end
       end
 
       def capture(money, authorization, options = {})
-        commit_transaction(:capture) do |xml|
+        commit(:capture) do |xml|
           add_order_id(xml, authorization)
           add_reference_num(xml, options)
           xml.payment do
@@ -44,13 +44,13 @@ module ActiveMerchant #:nodoc:
 
       def void(authorization, options = {})
         _, transaction_id = split_authorization(authorization)
-        commit_transaction(:void) do |xml|
+        commit(:void) do |xml|
           xml.transactionID transaction_id
         end
       end
 
       def refund(money, authorization, options = {})
-        commit_transaction(:return) do |xml|
+        commit(:return) do |xml|
           add_order_id(xml, authorization)
           add_reference_num(xml, options)
           xml.payment do
@@ -77,52 +77,26 @@ module ActiveMerchant #:nodoc:
           gsub(%r((<cvvNumber>)[^<]*(</cvvNumber>))i, '\1[FILTERED]\2')
       end
 
-      def add_consumer(options = {})
-        commit_api(:add_consumer) do |xml|
-          add_consumer_identification(xml, options)
-        end
-      end
-
       private
 
-      def commit_transaction(action)
-        request = build_xml_transaction_request(action) { |doc| yield(doc) }
-        response = parse(ssl_post(url_transaction, request, 'Content-Type' => 'text/xml'))
+      def commit(action)
+        request = build_xml_request(action) { |doc| yield(doc) }
+        response = parse(ssl_post(url, request, 'Content-Type' => 'text/xml'))
 
         Response.new(
-          transaction_success?(response),
-          transaction_message_from(response),
+          success?(response),
+          message_from(response),
           response,
           test: test?,
           authorization: authorization_from(response)
         )
       end
 
-      def commit_api(action)
-        request = build_xml_api_request(action) { |doc| yield(doc) }
-        response = parse(ssl_post(url_api, request, 'Content-Type' => 'text/xml'))
-
-        Response.new(
-          api_success?(response),
-          api_message_from(response),
-          response,
-          test: test?
-        )
-      end
-
-      def url_transaction
-        "#{url_base}/postXML"
-      end
-
-      def url_api
-        "#{url_base}/postAPI"
-      end
-
-      def url_base
+      def url
         test? ? self.test_url : self.live_url
       end
 
-      def build_xml_transaction_request(action)
+      def build_xml_request(action)
         builder = Nokogiri::XML::Builder.new(encoding: 'UTF-8')
         builder.send("transaction-request") do |xml|
           xml.version '3.1.1.15'
@@ -140,36 +114,12 @@ module ActiveMerchant #:nodoc:
         builder.to_xml(indent: 2)
       end
 
-      def build_xml_api_request(action)
-        builder = Nokogiri::XML::Builder.new(encoding: 'UTF-8')
-        builder.send("api-request") do |xml|
-          xml.verification do
-            xml.merchantId @options[:login]
-            xml.merchantKey @options[:password]
-          end
-          xml.command action.to_s.tr("_","-")
-          xml.request do
-            yield(xml)
-          end
-        end
-
-        builder.to_xml(indent: 2)
-      end
-
-      def transaction_success?(response)
+      def success?(response)
         response[:response_code] == '0'
       end
 
-      def api_success?(response)
-        response[:error_code] == '0'
-      end
-
-      def transaction_message_from(response)
+      def message_from(response)
         response[:error_message] || response[:response_message] || response[:processor_message] || response[:error_msg]
-      end
-
-      def api_message_from(response)
-        response[:error_message] || response[:customer_id]
       end
 
       def authorization_from(response)
@@ -264,16 +214,6 @@ module ActiveMerchant #:nodoc:
       def add_order_id(xml, authorization)
         order_id, _ = split_authorization(authorization)
         xml.orderID order_id
-      end
-
-      def add_consumer_identification(xml, options)
-        xml.customerIdExt options[:customer_id] if options[:customer_id]
-        xml.firstName options[:first_name] if options[:first_name]
-        xml.lastName options[:last_name] if options[:last_name]
-        xml.email options[:email] if options[:email]
-        xml.dob options[:birthdate] if options[:birthdate]
-        xml.ssn options[:document] if options[:document]
-        xml.sex options[:genre] if options[:genre]
       end
     end
   end
