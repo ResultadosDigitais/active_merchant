@@ -15,8 +15,8 @@ class MaxipagoTest < Test::Unit::TestCase
       :billing_address => address,
       :description => 'Store Purchase',
       :installments => 3,
-      :customer_token => '154676',
-      :expiration_date => '01/01/9999'
+      :customer_id => '154676',
+      :token_end_date => '01/01/9999'
     }
   end
 

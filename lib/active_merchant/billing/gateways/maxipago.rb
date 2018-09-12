@@ -218,11 +218,10 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_save_on_file(xml, options)
-        customer_token = options[:customer_token]
-        return unless customer_token
+        return unless options[:customer_id]
         xml.saveOnFile do
-          xml.customerToken customer_token
-          xml.onFileEndDate options[:token_expiration] if options[:token_expiration]
+          xml.customerToken options[:customer_id]
+          xml.onFileEndDate options[:token_end_date] if options[:token_end_date]
           xml.onFilePermission options[:token_permission] if options[:token_permission]
           xml.onFileComment options[:token_comment] if options[:token_comment]
           xml.onFileMaxChargeAmount options[:token_max_charge_amount] if options[:token_max_charge_amount]
