@@ -16,7 +16,7 @@ class MaxipagoTest < Test::Unit::TestCase
       :description => 'Store Purchase',
       :installments => 3,
       :email => "example@test.com",
-      :customer_id => "123456",
+      :customer_id_ext => "123456",
       :first_name => "John",
       :last_name => "White"
     }

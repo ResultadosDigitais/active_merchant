@@ -267,7 +267,7 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_consumer_identification(xml, options)
-        xml.customerIdExt options[:customer_id] if options[:customer_id]
+        xml.customerIdExt options[:customer_id_ext] if options[:customer_id_ext]
         xml.firstName options[:first_name] if options[:first_name]
         xml.lastName options[:last_name] if options[:last_name]
         xml.email options[:email] if options[:email]
