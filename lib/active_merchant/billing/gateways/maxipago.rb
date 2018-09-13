@@ -216,6 +216,7 @@ module ActiveMerchant #:nodoc:
           add_amount(xml, money, options)
           add_installments(xml, options)
         end
+        add_save_on_file(xml, options)
         add_billing_address(xml, creditcard, options)
       end
 
@@ -274,6 +275,17 @@ module ActiveMerchant #:nodoc:
         xml.dob options[:birthdate] if options[:birthdate]
         xml.ssn options[:document] if options[:document]
         xml.sex options[:genre] if options[:genre]
+      end
+
+      def add_save_on_file(xml, options)
+        return unless options[:customer_id]
+        xml.saveOnFile do
+          xml.customerToken options[:customer_id]
+          xml.onFileEndDate options[:token_end_date] if options[:token_end_date]
+          xml.onFilePermission options[:token_permission] if options[:token_permission]
+          xml.onFileComment options[:token_comment] if options[:token_comment]
+          xml.onFileMaxChargeAmount options[:token_max_charge_amount] if options[:token_max_charge_amount]
+        end
       end
     end
   end
