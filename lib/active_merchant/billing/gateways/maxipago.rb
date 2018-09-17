@@ -156,7 +156,7 @@ module ActiveMerchant #:nodoc:
           xml.payType do
             xml.creditCard do
               xml.number(creditcard.number)
-              xml.expMonth(creditcard.month)
+              xml.expMonth(month_with_two_digits(creditcard.month))
               xml.expYear(creditcard.year)
               xml.cvvNumber(creditcard.verification_value)
             end
@@ -214,6 +214,11 @@ module ActiveMerchant #:nodoc:
       def add_order_id(xml, authorization)
         order_id, _ = split_authorization(authorization)
         xml.orderID order_id
+      end
+
+      def month_with_two_digits(month)
+        adding_zero_to_month = "0#{month}"
+        adding_zero_to_month[-2..-1]
       end
     end
   end
