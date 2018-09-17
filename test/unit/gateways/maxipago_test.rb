@@ -3,18 +3,22 @@ require 'test_helper'
 class MaxipagoTest < Test::Unit::TestCase
   def setup
     @gateway = MaxipagoGateway.new(
-      :login => 'login',
-      :password => 'password'
+      login: 'login',
+      password: 'password'
     )
 
     @credit_card = credit_card
     @amount = 100
 
     @options = {
-      :order_id => '1',
-      :billing_address => address,
-      :description => 'Store Purchase',
-      :installments => 3
+      order_id: '1',
+      billing_address: address,
+      description: 'Store Purchase',
+      installments: 3,
+      email: 'example@test.com',
+      customer_id_ext: '123456',
+      first_name: 'John',
+      last_name: 'White'
     }
   end
 
@@ -124,6 +128,22 @@ class MaxipagoTest < Test::Unit::TestCase
   def test_scrub
     assert @gateway.supports_scrubbing?
     assert_equal @gateway.scrub(pre_scrubbed), post_scrubbed
+  end
+
+  def test_successful_add_consumer
+    @gateway.expects(:ssl_post).returns(successful_add_consumer_response)
+
+    response = @gateway.add_consumer(@options)
+    assert_success response
+
+    assert_equal '154676', response.message
+  end
+
+  def test_failed_add_consumer
+    @gateway.expects(:ssl_post).returns(failed_add_consumer_response)
+
+    response = @gateway.add_consumer(@options)
+    assert_failure response
   end
 
   private
@@ -367,6 +387,34 @@ class MaxipagoTest < Test::Unit::TestCase
         <processorMessage/>
         <errorMessage>The Return amount is greater than the amount that can be returned.</errorMessage>
       </transaction-response>
+    )
+  end
+
+  def successful_add_consumer_response
+    %(
+      <?xml version="1.0" encoding="UTF-8" ?>
+      <api-response>
+        <errorCode>0</errorCode>
+        <errorMessage></errorMessage>
+        <command>add-consumer</command>
+        <time>1536756399834</time>
+        <result>
+          <customerId>154676</customerId>
+        </result>
+      </api-response>
+    )
+  end
+
+  def failed_add_consumer_response
+    %(
+      <?xml version="1.0" encoding="UTF-8" ?>
+      <api-response>
+        <errorCode>1</errorCode>
+        <errorMessage>
+          <![CDATA[Parser Error: URI=null Line=1: cvc-complex-type.2.4.a: Invalid content was found starting with element 'firstName'. One of '{customerIdExt}' is expected.]]>
+        </errorMessage>
+        <time>1536757354405</time>
+      </api-response>
     )
   end
 end

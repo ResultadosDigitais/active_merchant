@@ -13,7 +13,10 @@ class RemoteMaxipagoTest < Test::Unit::TestCase
       order_id: '12345',
       billing_address: address,
       description: 'Store Purchase',
-      installments: 3
+      installments: 3,
+      customer_id_ext: '123456',
+      first_name: 'John',
+      last_name: 'White'
     }
   end
 
@@ -126,6 +129,16 @@ class RemoteMaxipagoTest < Test::Unit::TestCase
       password: ''
     )
     response = gateway.purchase(@amount, @credit_card, @options)
+    assert_failure response
+  end
+
+  def test_successful_add_consumer
+    assert response = @gateway.add_consumer(@options)
+    assert_success response
+  end
+
+  def test_failed_add_consumer
+    assert response = @gateway.add_consumer(@options.except(:customer_id_ext))
     assert_failure response
   end
 end
