@@ -11,12 +11,12 @@ class MaxipagoTest < Test::Unit::TestCase
     @amount = 100
 
     @options = {
-      :order_id => '1',
-      :billing_address => address,
-      :description => 'Store Purchase',
-      :installments => 3,
-      :customer_id => '154676',
-      :token_end_date => '01/01/9999'
+      order_id: '1',
+      billing_address: address,
+      description: 'Store Purchase',
+      installments: 3,
+      customer_id: '154676',
+      token_end_date: '01/01/9999'
     }
   end
 
