@@ -10,16 +10,16 @@ class MaxipagoTest < Test::Unit::TestCase
     @credit_card = credit_card
     @token = network_tokenization_credit_card('4242424242424242',
       source: :maxipago,
-      payment_cryptogram: "iZrWy6+PJpQ="
+      payment_cryptogram: 'iZrWy6+PJpQ='
     )
     @amount = 100
 
     @options = {
-      :order_id => '1',
-      :billing_address => address,
-      :description => 'Store Purchase',
-      :installments => 3,
-      :customer_id => "123456"
+      order_id: '1',
+      billing_address: address,
+      description: 'Store Purchase',
+      installments: 3,
+      customer_id: '123456'
     }
   end
 

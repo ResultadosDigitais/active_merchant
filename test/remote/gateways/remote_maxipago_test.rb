@@ -10,11 +10,11 @@ class RemoteMaxipagoTest < Test::Unit::TestCase
     @invalid_card = credit_card('4111111111111111', year: Time.now.year - 1)
     @token = network_tokenization_credit_card('4242424242424242',
       source: :maxipago,
-      payment_cryptogram: "nTCScqnlifE="
+      payment_cryptogram: 'nTCScqnlifE='
     )
     @invalid_token = network_tokenization_credit_card('4242424242424242',
       source: :maxipago,
-      payment_cryptogram: "iZrWy6+PJpQ="
+      payment_cryptogram: 'iZrWy6+PJpQ='
     )
 
     @options = {
@@ -24,8 +24,8 @@ class RemoteMaxipagoTest < Test::Unit::TestCase
       installments: 3,
       customer_id_ext: '123456',
       first_name: 'John',
-      last_name: 'White'
-      :customer_id => "154729"
+      last_name: 'White',
+      customer_id: '154729'
     }
   end
 
