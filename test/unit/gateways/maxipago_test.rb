@@ -11,14 +11,14 @@ class MaxipagoTest < Test::Unit::TestCase
     @amount = 100
 
     @options = {
-      :order_id => '1',
-      :billing_address => address,
-      :description => 'Store Purchase',
-      :installments => 3,
-      :email => "example@test.com",
-      :customer_id_ext => "123456",
-      :first_name => "John",
-      :last_name => "White"
+      order_id: '1',
+      billing_address: address,
+      description: 'Store Purchase',
+      installments: 3,
+      email: 'example@test.com',
+      customer_id_ext: '123456',
+      first_name: 'John',
+      last_name: 'White'
     }
   end
 
