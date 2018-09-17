@@ -8,12 +8,24 @@ class RemoteMaxipagoTest < Test::Unit::TestCase
     @invalid_amount = 2009
     @credit_card = credit_card('4111111111111111', verification_value: '444')
     @invalid_card = credit_card('4111111111111111', year: Time.now.year - 1)
+    @token = network_tokenization_credit_card('4242424242424242',
+      source: :maxipago,
+      payment_cryptogram: "nTCScqnlifE="
+    )
+    @invalid_token = network_tokenization_credit_card('4242424242424242',
+      source: :maxipago,
+      payment_cryptogram: "iZrWy6+PJpQ="
+    )
 
     @options = {
       order_id: '12345',
       billing_address: address,
       description: 'Store Purchase',
-      installments: 3
+      installments: 3,
+      customer_id_ext: "123456",
+      first_name: "John",
+      last_name: "White",
+      customer_id: "154729"
     }
   end
 
@@ -27,6 +39,18 @@ class RemoteMaxipagoTest < Test::Unit::TestCase
     assert response = @gateway.authorize(@amount, @invalid_card, @options)
     assert_failure response
     assert_equal "The transaction has an expired credit card.", response.message
+  end
+
+  def test_successful_authorize_with_token
+    assert response = @gateway.authorize(@amount, @token, @options)
+    assert_success response
+    assert_equal "AUTHORIZED", response.message
+  end
+
+  def test_failed_authorize_with_token
+    assert response = @gateway.authorize(@amount, @invalid_token, @options)
+    assert_failure response
+    assert_equal "Customer id validation error.", response.message
   end
 
   def test_successful_authorize_and_capture
@@ -126,6 +150,16 @@ class RemoteMaxipagoTest < Test::Unit::TestCase
       password: ''
     )
     response = gateway.purchase(@amount, @credit_card, @options)
+    assert_failure response
+  end
+
+  def test_successful_add_consumer
+    assert response = @gateway.add_consumer(@options)
+    assert_success response
+  end
+
+  def test_failed_add_consumer
+    assert response = @gateway.add_consumer(@options.except(:customer_id_ext))
     assert_failure response
   end
 end
