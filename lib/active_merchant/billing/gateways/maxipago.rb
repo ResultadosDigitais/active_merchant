@@ -204,11 +204,10 @@ module ActiveMerchant #:nodoc:
         add_reference_num(xml, options)
         xml.transactionDetail do
           xml.payType do
-            xml.creditCard do
-              xml.number(creditcard.number)
-              xml.expMonth(month_with_two_digits(creditcard.month))
-              xml.expYear(creditcard.year)
-              xml.cvvNumber(creditcard.verification_value)
+            if creditcard.is_a?(NetworkTokenizationCreditCard)
+              add_token(xml, creditcard, options)
+            else
+              add_credit_card(xml, creditcard)
             end
           end
         end
@@ -290,6 +289,23 @@ module ActiveMerchant #:nodoc:
           xml.onFilePermission options[:token_permission] if options[:token_permission]
           xml.onFileComment options[:token_comment] if options[:token_comment]
           xml.onFileMaxChargeAmount options[:token_max_charge_amount] if options[:token_max_charge_amount]
+        end
+      end
+
+      def add_credit_card(xml, creditcard)
+        xml.creditCard do
+          xml.number(creditcard.number)
+          xml.expMonth(month_with_two_digits(creditcard.month))
+          xml.expYear(creditcard.year)
+          xml.cvvNumber(creditcard.verification_value)
+        end
+      end
+
+      def add_token(xml, creditcard, options)
+        return unless options[:customer_id]
+        xml.onFile do
+          xml.customerId(options[:customer_id])
+          xml.token(creditcard.payment_cryptogram)
         end
       end
     end
