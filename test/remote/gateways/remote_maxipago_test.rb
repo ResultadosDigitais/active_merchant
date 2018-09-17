@@ -14,9 +14,9 @@ class RemoteMaxipagoTest < Test::Unit::TestCase
       billing_address: address,
       description: 'Store Purchase',
       installments: 3,
-      :customer_id_ext => "123456",
-      :first_name => "John",
-      :last_name => "White"
+      customer_id_ext: '123456',
+      first_name: 'John',
+      last_name: 'White'
     }
   end
 
