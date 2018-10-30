@@ -199,7 +199,7 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_auth_purchase(xml, money, creditcard, options)
-        add_processor_id(xml)
+        add_processor_id(xml, options)
         xml.fraudCheck('N')
         add_reference_num(xml, options)
         xml.transactionDetail do
@@ -215,8 +215,10 @@ module ActiveMerchant #:nodoc:
           add_amount(xml, money, options)
           add_installments(xml, options)
         end
-        add_save_on_file(xml, options)
-        add_billing_address(xml, creditcard, options)
+        if creditcard.is_a?(CreditCard)
+          add_save_on_file(xml, options)
+          add_billing_address(xml, creditcard, options)
+        end
       end
 
       def add_reference_num(xml, options)
@@ -228,11 +230,11 @@ module ActiveMerchant #:nodoc:
         xml.currencyCode(options[:currency] || currency(money) || default_currency)
       end
 
-      def add_processor_id(xml)
+      def add_processor_id(xml, options)
         if test?
           xml.processorID(1)
         else
-          xml.processorID(@options[:processor_id] || 4)
+          xml.processorID(options[:processor_id] || 4)
         end
       end
 
