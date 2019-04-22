@@ -189,10 +189,10 @@ module ActiveMerchant #:nodoc:
               if options[:hcg_additional_data]
                 add_hcg_additional_data(xml, options)
               end
-	            add_create_token(xml, options)
               if options[:instalments]
                 add_instalments_data(xml, options)
               end
+              add_create_token(xml, options)
             end
           end
         end
