@@ -31,28 +31,7 @@ module ActiveMerchant # :nodoc:
         'maestro'          => 'MAESTRO-SSL',
         'laser'            => 'LASER-SSL',
         'diners_club'      => 'DINERS-SSL',
-        'switch'           => 'MAESTRO-SSL',
-        'elo'              => 'ELO-SSL'
-      }
-
-      AVS_CODE_MAP = {
-        'A' => 'M', # Match
-        'B' => 'P', # Postcode matches, address not verified
-        'C' => 'Z', # Postcode matches, address does not match
-        'D' => 'B', # Address matched; postcode not checked
-        'E' => 'I', # Address and postal code not checked
-        'F' => 'A', # Address matches, postcode does not match
-        'G' => 'C', # Address does not match, postcode not checked
-        'H' => 'I', # Address and postcode not provided
-        'I' => 'C', # Address not checked postcode does not match
-        'J' => 'C', # Address and postcode does not match
-      }
-
-      CVC_CODE_MAP = {
-        'A' => 'M', # CVV matches
-        'B' => 'P', # Not provided
-        'C' => 'P', # Not checked
-        'D' => 'N', # Does not match
+        'switch'           => 'MAESTRO-SSL'
       }
 
       def initialize(options = {})
@@ -62,8 +41,8 @@ module ActiveMerchant # :nodoc:
 
       def purchase(money, payment_method, options = {})
         MultiResponse.run do |r|
-          r.process { authorize(money, payment_method, options) }
-          r.process { capture(money, r.authorization, options.merge(:authorization_validated => true)) }
+          r.process{authorize(money, payment_method, options)}
+          r.process{capture(money, r.authorization, options.merge(:authorization_validated => true))}
         end
       end
 
@@ -76,23 +55,20 @@ module ActiveMerchant # :nodoc:
       def capture(money, authorization, options = {})
         authorization = order_id_from_authorization(authorization.to_s)
         MultiResponse.run do |r|
-          r.process { inquire_request(authorization, options, 'AUTHORISED') } unless options[:authorization_validated]
+          r.process{inquire_request(authorization, options, "AUTHORISED")} unless options[:authorization_validated]
           if r.params
             authorization_currency = r.params['amount_currency_code']
             options = options.merge(currency: authorization_currency) if authorization_currency.present?
           end
-          r.process { capture_request(money, authorization, options) }
-          r.process { capture_request(money, authorization, options) }
+          r.process{capture_request(money, authorization, options)}
         end
       end
 
       def void(authorization, options = {})
         authorization = order_id_from_authorization(authorization.to_s)
         MultiResponse.run do |r|
-          r.process { inquire_request(authorization, options, 'AUTHORISED') } unless options[:authorization_validated]
-          r.process { cancel_request(authorization, options) }
-          r.process { inquire_request(authorization, options, 'AUTHORISED') } unless options[:authorization_validated]
-          r.process { cancel_request(authorization, options) }
+          r.process{inquire_request(authorization, options, "AUTHORISED")}
+          r.process{cancel_request(authorization, options)}
         end
       end
 
@@ -101,14 +77,14 @@ module ActiveMerchant # :nodoc:
         success_criteria = %w(CAPTURED SETTLED SETTLED_BY_MERCHANT SENT_FOR_REFUND)
         success_criteria.push('AUTHORIZED') if options[:cancel_or_refund]
         response = MultiResponse.run do |r|
-          r.process { inquire_request(authorization, options, 'CAPTURED', 'SETTLED', 'SETTLED_BY_MERCHANT') }
+          r.process { inquire_request(authorization, options, "CAPTURED", "SETTLED", "SETTLED_BY_MERCHANT") }
           r.process { refund_request(money, authorization, options) }
         end
 
         return response if response.success?
         return response unless options[:force_full_refund_if_unsettled]
 
-        void(authorization, options) if response.params['last_event'] == 'AUTHORISED'
+        void(authorization, options ) if response.params["last_event"] == "AUTHORISED"
       end
 
       # Credits only function on a Merchant ID/login/profile flagged for Payouts
@@ -130,7 +106,7 @@ module ActiveMerchant # :nodoc:
         amount = (eligible_for_0_auth?(payment_method, options) ? 0 : 100)
         MultiResponse.run(:use_first_response) do |r|
           r.process { authorize(100, credit_card, options) }
-          r.process(:ignore_result) { void(r.authorization, options.merge(:authorization_validated => true)) }
+          r.process(:ignore_result) { void(r.authorization, options) }
         end
       end
 
@@ -184,11 +160,11 @@ module ActiveMerchant # :nodoc:
       end
 
       def cancel_request(authorization, options)
-        commit('cancel', build_void_request(authorization, options), :ok, options)
+        commit('cancel', build_void_request(authorization, options), :ok)
       end
 
       def inquire_request(authorization, options, *success_criteria)
-        commit('inquiry', build_order_inquiry_request(authorization, options), *success_criteria, options)
+        commit('inquiry', build_order_inquiry_request(authorization, options), *success_criteria)
       end
 
       def refund_request(money, authorization, options)
@@ -236,11 +212,9 @@ module ActiveMerchant # :nodoc:
               add_order_content(xml, options)
               add_payment_method(xml, money, payment_method, options)
               add_email(xml, options)
+              add_instalments(xml, options)
               if options[:hcg_additional_data]
                 add_hcg_additional_data(xml, options)
-              end
-              if options[:instalments]
-                add_instalments_data(xml, options)
               end
               add_create_token(xml, options)
             end
@@ -464,8 +438,8 @@ module ActiveMerchant # :nodoc:
                   xml.tag! 'date', 'month' => format(payment_method.month, :two_digits), 'year' => format(payment_method.year, :four_digits)
                 end
 
-              xml.tag! 'cardHolderName', options[:execute_threed] ? '3D' : payment_method.name
-              xml.tag! 'cvc', payment_method.verification_value
+                xml.tag! 'cardHolderName', payment_method.name
+                xml.tag! 'cvc', payment_method.verification_value
 
                 add_address(xml, (options[:billing_address] || options[:address]))
               end
@@ -476,16 +450,6 @@ module ActiveMerchant # :nodoc:
             else
               xml.tag! 'session', 'shopperIPAddress' => options[:ip] if options[:ip]
               xml.tag! 'session', 'id' => options[:session_id] if options[:session_id]
-            end
-
-            if three_d_secure = options[:three_d_secure]
-              xml.tag! 'info3DSecure' do
-                xml.tag! 'threeDSVersion', three_d_secure[:version]
-                xid_tag = three_d_secure[:version] =~ /^2/ ? 'dsTransactionId' : 'xid'
-                xml.tag! xid_tag, three_d_secure[:xid]
-                xml.tag! 'cavv', three_d_secure[:cavv]
-                xml.tag! 'eci', three_d_secure[:eci]
-              end
             end
           end
         end
@@ -528,14 +492,18 @@ module ActiveMerchant # :nodoc:
       end
 
       def add_email(xml, options)
-        return unless options[:execute_threed] || options[:email]
+        return unless options[:email]
         xml.tag! 'shopper' do
           xml.tag! 'shopperEmailAddress', options[:email]
           xml.tag! 'authenticatedShopperID', options[:shopper_id] if options[:shopper_id]
-          xml.tag! 'browser' do
-            xml.tag! 'acceptHeader', options[:accept_header]
-            xml.tag! 'userAgentHeader', options[:user_agent]
-          end
+        end
+      end
+
+      def add_instalments(xml, options)
+        return unless options[:instalments]
+
+        xml.tag! 'thirdPartyData' do
+          xml.tag! 'instalments', options[:instalments]
         end
       end
 
