@@ -577,69 +577,15 @@ class RemoteWorldpayTest < Test::Unit::TestCase
     assert_success capture
   end
 
-  def test_authorize_and_purchase_with_instalments
-    assert auth = @gateway.authorize(@amount, @credit_card, @options.merge(instalment: 3))
-    assert_success auth
-    assert_equal 'SUCCESS', auth.message
-    assert auth.authorization
-
-    assert capture = @gateway.capture(@amount, auth.authorization, authorization_validated: true)
-    assert_success capture
-  end
-
-  def test_successful_authorize_with_3ds
-    session_id = generate_unique_id
-    options = @options.merge(
-      {
-        execute_threed: true,
-        accept_header: 'text/html',
-        user_agent: 'Mozilla/5.0',
-        session_id:,
-        ip: '127.0.0.1',
-        cookie: 'machine=32423423'
-      }
-    )
-    assert first_message = @gateway.authorize(@amount, @threeDS_card, options)
-    assert first_message.test?
-    assert first_message.success?
-    refute first_message.authorization.blank?
-    refute first_message.params['cookie'].blank?
-    refute first_message.params['session_id'].blank?
-  end
-
-  # Ensure the account is configured to use this feature to proceed successfully
-  def test_marking_3ds_purchase_as_moto
-    assert response = @gateway.purchase(@amount, @credit_card, @options.merge(metadata: { manual_entry: true }))
-    assert_success response
-    assert_equal 'SUCCESS', response.message
-  end
-
-  def test_successful_authorize_with_3ds2_challenge
-    session_id = generate_unique_id
-    options = @options.merge(
-      # inserted this @aft_otpions for testing during review if desired, did not want to duplicate
-      # this entire test with just this addtion, will remove after review
-      @aft_options,
-      {
-        execute_threed: true,
-        accept_header: 'text/html',
-        user_agent: 'Mozilla/5.0',
-        session_id:,
-        ip: '127.0.0.1'
-      }
-    )
-    assert response = @gateway.authorize(@amount, @threeDS2_challenge_card, options)
-    assert response.test?
-    refute response.authorization.blank?
-    assert response.success?
-    refute response.params['cookie'].blank?
-    refute response.params['session_id'].blank?
-  end
-
   def test_successful_auth_and_capture_with_normalized_stored_credential
-    stored_credential_params = stored_credential(:initial, :unscheduled, :merchant)
+    stored_credential_params = {
+      initial_transaction: true,
+      reason_type: 'unscheduled',
+      initiator: 'merchant',
+      network_transaction_id: nil
+    }
 
-    assert auth = @gateway.authorize(@amount, @credit_card, @options.merge({ stored_credential: stored_credential_params }))
+    assert auth = @gateway.authorize(@amount, @credit_card, @options.merge({stored_credential: stored_credential_params}))
     assert_success auth
     assert auth.authorization
     assert auth.params['scheme_response']
@@ -649,31 +595,12 @@ class RemoteWorldpayTest < Test::Unit::TestCase
     assert_success capture
 
     @options[:order_id] = generate_unique_id
-    @options[:stored_credential] = stored_credential(:used, :installment, :merchant, network_transaction_id: auth.params['transaction_identifier'])
-
-    assert next_auth = @gateway.authorize(@amount, @credit_card, @options)
-    assert next_auth.authorization
-    assert next_auth.params['scheme_response']
-    assert next_auth.params['transaction_identifier']
-
-    assert capture = @gateway.capture(@amount, next_auth.authorization, authorization_validated: true)
-    assert_success capture
-  end
-
-  def test_successful_auth_and_capture_with_normalized_recurring_stored_credential
-    stored_credential_params = stored_credential(:initial, :recurring, :merchant)
-
-    assert auth = @gateway.authorize(@amount, @credit_card, @options.merge({ stored_credential: stored_credential_params }))
-    assert_success auth
-    assert auth.authorization
-    assert auth.params['scheme_response']
-    assert auth.params['transaction_identifier']
-
-    assert capture = @gateway.capture(@amount, auth.authorization, authorization_validated: true)
-    assert_success capture
-
-    @options[:order_id] = generate_unique_id
-    @options[:stored_credential] = stored_credential(:used, :recurring, :merchant, network_transaction_id: auth.params['transaction_identifier'])
+    @options[:stored_credential] = {
+      initial_transaction: false,
+      reason_type: 'installment',
+      initiator: 'merchant',
+      network_transaction_id: auth.params['transaction_identifier']
+    }
 
     assert next_auth = @gateway.authorize(@amount, @credit_card, @options)
     assert next_auth.authorization
