@@ -8,6 +8,8 @@ rvm:
 - 2.2.7
 - 2.3.4
 - 2.4.1
+- 2.5.3
+- 2.6.5
 
 gemfile:
 - Gemfile.rails32
@@ -16,6 +18,8 @@ gemfile:
 - Gemfile.rails42
 - Gemfile.rails50
 - Gemfile.rails51
+- Gemfile.rails52
+- Gemfile.rails60
 
 matrix:
   exclude:
