@@ -3,18 +3,28 @@ require 'test_helper'
 class MaxipagoTest < Test::Unit::TestCase
   def setup
     @gateway = MaxipagoGateway.new(
-      :login => 'login',
-      :password => 'password'
+      login: 'login',
+      password: 'password'
     )
 
     @credit_card = credit_card
+    @token = network_tokenization_credit_card('4242424242424242',
+      source: :maxipago,
+      payment_cryptogram: 'iZrWy6+PJpQ='
+    )
     @amount = 100
 
     @options = {
-      :order_id => '1',
-      :billing_address => address,
-      :description => 'Store Purchase',
-      :installments => 3
+      order_id: '1',
+      billing_address: address,
+      description: 'Store Purchase',
+      installments: 3,
+      email: 'example@test.com',
+      customer_id_ext: '123456',
+      first_name: 'John',
+      last_name: 'White',
+      customer_id: '123456',
+      token_end_date: '01/01/9999'
     }
   end
 
@@ -25,12 +35,30 @@ class MaxipagoTest < Test::Unit::TestCase
     assert_success response
 
     assert_equal '123456789|123456789', response.authorization
+    assert_equal 'iZrWy6+PJpQ=', response.params["token"]
+    assert_equal '4242********4242', response.params["credit_card_number"]
   end
 
   def test_failed_purchase
     @gateway.expects(:ssl_post).returns(failed_purchase_response)
 
     response = @gateway.purchase(@amount, @credit_card, @options)
+    assert_failure response
+  end
+
+  def test_successful_purchase_with_token
+    @gateway.expects(:ssl_post).returns(successful_purchase_response_with_token)
+
+    response = @gateway.purchase(@amount, @token, @options)
+    assert_success response
+
+    assert_equal '0A0104A3:0165CF0C0087:3448:06B0286F|2212519', response.authorization
+  end
+
+  def test_failed_purchase_with_token
+    @gateway.expects(:ssl_post).returns(failed_purchase_response_with_token)
+
+    response = @gateway.purchase(@amount, @token, @options.except(:customer_id))
     assert_failure response
   end
 
@@ -41,6 +69,9 @@ class MaxipagoTest < Test::Unit::TestCase
     assert_success response
 
     assert_equal 'C0A8013F:014455FCC857:91A0:01A7243E|663921', response.authorization
+    assert_equal 'iZrWy6+PJpQ=', response.params["token"]
+    assert_equal '4242********4242', response.params["credit_card_number"]
+
     assert response.test?
   end
 
@@ -126,6 +157,22 @@ class MaxipagoTest < Test::Unit::TestCase
     assert_equal @gateway.scrub(pre_scrubbed), post_scrubbed
   end
 
+  def test_successful_add_consumer
+    @gateway.expects(:ssl_post).returns(successful_add_consumer_response)
+
+    response = @gateway.add_consumer(@options)
+    assert_success response
+
+    assert_equal '154676', response.message
+  end
+
+  def test_failed_add_consumer
+    @gateway.expects(:ssl_post).returns(failed_add_consumer_response)
+
+    response = @gateway.add_consumer(@options)
+    assert_failure response
+  end
+
   private
 
   def pre_scrubbed
@@ -196,6 +243,12 @@ class MaxipagoTest < Test::Unit::TestCase
         <processorTransactionID>123456789</processorTransactionID>
         <processorReferenceNumber>123456789</processorReferenceNumber>
         <fraudScore>29</fraudScore>
+        <creditCardCountry>US</creditCardCountry>
+        <creditCardScheme>Visa</creditCardScheme>
+        <save-on-file>
+          <token>iZrWy6+PJpQ=</token>
+          <creditCardNumber>4242********4242</creditCardNumber>
+        </save-on-file>
       </transaction-response>
     )
   end
@@ -219,6 +272,41 @@ class MaxipagoTest < Test::Unit::TestCase
     )
   end
 
+  def successful_purchase_response_with_token
+    %(
+      <?xml version="1.0" encoding="UTF-8"?>
+      <transaction-response>
+        <authCode>123456</authCode>
+        <orderID>0A0104A3:0165CF0C0087:3448:06B0286F</orderID>
+        <referenceNum>1</referenceNum>
+        <transactionID>2212519</transactionID>
+        <transactionTimestamp>1536776994</transactionTimestamp>
+        <responseCode>0</responseCode>
+        <responseMessage>CAPTURED</responseMessage>
+        <avsResponseCode>YYY</avsResponseCode>
+        <cvvResponseCode>M</cvvResponseCode>
+        <processorCode>A</processorCode>
+        <processorMessage>APPROVED</processorMessage>
+        <processorName>SIMULATOR</processorName>
+        <errorMessage/>
+        <processorTransactionID>702692</processorTransactionID>
+        <processorReferenceNumber>139862</processorReferenceNumber>
+        <creditCardCountry>US</creditCardCountry>
+        <creditCardScheme>Visa</creditCardScheme>
+      </transaction-response>
+    )
+  end
+
+  def failed_purchase_response_with_token
+    %(
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <api-error>
+        <errorCode>1</errorCode>
+        <errorMsg><![CDATA[Customer id validation error.]]></errorMsg>
+      </api-error>
+    )
+  end
+
   def successful_authorize_response
     %(
       <?xml version="1.0" encoding="UTF-8"?>
@@ -235,6 +323,12 @@ class MaxipagoTest < Test::Unit::TestCase
         <processorCode>A</processorCode>
         <processorMessage>APPROVED</processorMessage>
         <errorMessage/>
+        <creditCardCountry>US</creditCardCountry>
+        <creditCardScheme>Visa</creditCardScheme>
+        <save-on-file>
+          <token>iZrWy6+PJpQ=</token>
+          <creditCardNumber>4242********4242</creditCardNumber>
+        </save-on-file>
       </transaction-response>
     )
   end
@@ -367,6 +461,34 @@ class MaxipagoTest < Test::Unit::TestCase
         <processorMessage/>
         <errorMessage>The Return amount is greater than the amount that can be returned.</errorMessage>
       </transaction-response>
+    )
+  end
+
+  def successful_add_consumer_response
+    %(
+      <?xml version="1.0" encoding="UTF-8" ?>
+      <api-response>
+        <errorCode>0</errorCode>
+        <errorMessage></errorMessage>
+        <command>add-consumer</command>
+        <time>1536756399834</time>
+        <result>
+          <customerId>154676</customerId>
+        </result>
+      </api-response>
+    )
+  end
+
+  def failed_add_consumer_response
+    %(
+      <?xml version="1.0" encoding="UTF-8" ?>
+      <api-response>
+        <errorCode>1</errorCode>
+        <errorMessage>
+          <![CDATA[Parser Error: URI=null Line=1: cvc-complex-type.2.4.a: Invalid content was found starting with element 'firstName'. One of '{customerIdExt}' is expected.]]>
+        </errorMessage>
+        <time>1536757354405</time>
+      </api-response>
     )
   end
 end

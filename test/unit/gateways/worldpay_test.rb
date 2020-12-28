@@ -12,6 +12,7 @@ class WorldpayTest < Test::Unit::TestCase
     @amount = 100
     @credit_card = credit_card('4242424242424242')
     @options = {:order_id => 1}
+    @token = network_tokenization_credit_card(source: :worldpay, payment_cryptogram: "9902019934757792074")
   end
 
   def test_successful_authorize
@@ -49,6 +50,21 @@ class WorldpayTest < Test::Unit::TestCase
       @gateway.authorize(@amount, @credit_card, @options.merge(ip: '127.0.0.1', session_id: '0215ui8ib1'))
     end.check_request do |endpoint, data, headers|
       assert_match(/<session shopperIPAddress="127.0.0.1" id="0215ui8ib1"\/>/, data)
+    end.respond_with(successful_authorize_response)
+    assert_success response
+  end
+
+  def test_authorize_passes_stored_credential_options
+    options = @options.merge(
+      stored_credential_usage: 'USED',
+      stored_credential_initiated_reason: 'UNSCHEDULED',
+      stored_credential_transaction_id: '000000000000020005060720116005060'
+    )
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, options)
+    end.check_request do |endpoint, data, headers|
+      assert_match(/<storedCredentials usage\=\"USED\" merchantInitiatedReason\=\"UNSCHEDULED\"\>/, data)
+      assert_match(/<schemeTransactionIdentifier\>000000000000020005060720116005060\<\/schemeTransactionIdentifier\>/, data)
     end.respond_with(successful_authorize_response)
     assert_success response
   end
@@ -352,6 +368,20 @@ class WorldpayTest < Test::Unit::TestCase
     end.respond_with(successful_authorize_response)
   end
 
+  def test_instalments
+    stub_comms do
+      @gateway.authorize(100, @credit_card, @options.merge(instalments: '3'))
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<instalments>3</instalments>), data
+    end.respond_with(successful_authorize_response)
+
+    stub_comms do
+      @gateway.authorize(100, @credit_card, @options)
+    end.check_request do |endpoint, data, headers|
+      assert_no_match %r(instalments), data
+    end.respond_with(successful_authorize_response)
+  end
+
   def test_ip
     stub_comms do
       @gateway.authorize(100, @credit_card, @options.merge(ip: "192.137.11.44"))
@@ -407,6 +437,7 @@ class WorldpayTest < Test::Unit::TestCase
     ActiveMerchant::Billing::Base.mode = :production
 
     @gateway = WorldpayGateway.new(
+      :merchant_code_login => 'testlogin',
       :login => 'testlogin',
       :password => 'testpassword',
       :test => true
@@ -464,6 +495,31 @@ class WorldpayTest < Test::Unit::TestCase
 
   def test_transcript_scrubbing
     assert_equal scrubbed_transcript, @gateway.scrub(transcript)
+  end
+
+  def test_successful_purchase_with_create_shopper_token
+    @options = @options.merge(create_token: {}, token_scope: 'shopper', shopper_id: '10-1')
+    response = stub_comms do
+      @gateway.purchase(@amount, @credit_card, @options)
+    end.respond_with(successful_authorize_with_token_response, successful_capture_response)
+    assert_success response
+    assert_equal '9902019934757792074', response.responses.first.params['payment_token_id']
+  end
+
+  def test_successful_purchase_with_create_merchant_token
+    @options = @options.merge(create_token: {}, token_scope: 'merchant')
+    response = stub_comms do
+      @gateway.purchase(@amount, @credit_card, @options)
+    end.respond_with(successful_authorize_with_token_response, successful_capture_response)
+    assert_success response
+    assert_equal '9902019934757792074', response.responses.first.params['payment_token_id']
+  end
+
+  def test_successful_purchase_using_token
+    response = stub_comms do
+      @gateway.purchase(@amount, @token, @options)
+    end.respond_with(successful_authorize_response, successful_capture_response)
+    assert_success response
   end
 
   private
@@ -845,5 +901,39 @@ class WorldpayTest < Test::Unit::TestCase
       </submit>
     </paymentService>
     TRANSCRIPT
+  end
+
+  def successful_authorize_with_token_response
+    <<-RESPONSE
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE paymentService PUBLIC "-//Bibit//DTD Bibit PaymentService v1//EN"
+                                      "http://dtd.bibit.com/paymentService_v1.dtd">
+      <paymentService version="1.4" merchantCode="XXXXXXXXXXXXXXX">
+        <reply>
+          <orderStatus orderCode="R50704213207145707">
+            <payment>
+              <paymentMethod>VISA-SSL</paymentMethod>
+              <amount value="15000" currencyCode="HKD" exponent="2" debitCreditIndicator="credit"/>
+              <lastEvent>AUTHORISED</lastEvent>
+              <CVCResultCode description="UNKNOWN"/>
+              <AVSResultCode description="UNKNOWN"/>
+              <balance accountType="IN_PROCESS_AUTHORISED">
+                <amount value="15000" currencyCode="HKD" exponent="2" debitCreditIndicator="credit"/>
+              </balance>
+              <cardNumber>4111********1111</cardNumber>
+              <riskScore value="1"/>
+            </payment>
+            <token>
+              <tokenDetails tokenEvent="NEW">
+                <paymentTokenID>9902019934757792074</paymentTokenID>
+                <paymentTokenExpiry>
+                  <date dayOfMonth="3" month="03" year="2019" hour="02" minute="25" second="15"/>
+                </paymentTokenExpiry>
+              </tokenDetails>
+            </token>
+          </orderStatus>
+        </reply>
+      </paymentService>
+    RESPONSE
   end
 end

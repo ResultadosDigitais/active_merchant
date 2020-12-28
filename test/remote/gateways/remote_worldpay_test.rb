@@ -31,6 +31,20 @@ class RemoteWorldpayTest < Test::Unit::TestCase
     assert_equal 'SUCCESS', response.message
   end
 
+  def test_successful_purchase_with_create_shopper_token
+    @options.merge!(create_token: {}, token_scope: 'shopper', shopper_id: '10-1')
+    assert response = @gateway.purchase(@amount, @credit_card, @options)
+    assert_success response
+    assert_equal 'SUCCESS', response.message
+  end
+
+  def test_successful_purchase_with_create_merchant_token
+    @options.merge!(create_token: {}, token_scope: 'merchant')
+    assert response = @gateway.purchase(@amount, @credit_card, @options)
+    assert_success response
+    assert_equal 'SUCCESS', response.message
+  end
+
   def test_failed_purchase
     assert response = @gateway.purchase(@amount, @declined_card, @options)
     assert_failure response
@@ -73,6 +87,65 @@ class RemoteWorldpayTest < Test::Unit::TestCase
     assert auth = @gateway.authorize(@amount, reference, @options)
     @options[:order_id] = generate_unique_id
     assert capture = @gateway.purchase(@amount, auth.authorization, @options)
+    assert_success capture
+  end
+
+  def test_successful_auth_and_capture_with_normalized_stored_credential
+    stored_credential_params = {
+      initial_transaction: true,
+      reason_type: 'unscheduled',
+      initiator: 'merchant',
+      network_transaction_id: nil
+    }
+
+    assert auth = @gateway.authorize(@amount, @credit_card, @options.merge({stored_credential: stored_credential_params}))
+    assert_success auth
+    assert auth.authorization
+    assert auth.params['scheme_response']
+    assert auth.params['transaction_identifier']
+
+    assert capture = @gateway.capture(@amount, auth.authorization, authorization_validated: true)
+    assert_success capture
+
+    @options[:order_id] = generate_unique_id
+    @options[:stored_credential] = {
+      initial_transaction: false,
+      reason_type: 'installment',
+      initiator: 'merchant',
+      network_transaction_id: auth.params['transaction_identifier']
+    }
+
+    assert next_auth = @gateway.authorize(@amount, @credit_card, @options)
+    assert next_auth.authorization
+    assert next_auth.params['scheme_response']
+    assert next_auth.params['transaction_identifier']
+
+    assert capture = @gateway.capture(@amount, next_auth.authorization, authorization_validated: true)
+    assert_success capture
+  end
+
+  def test_successful_auth_and_capture_with_gateway_specific_stored_credentials
+    assert auth = @gateway.authorize(@amount, @credit_card, @options.merge(stored_credential_usage: 'FIRST'))
+    assert_success auth
+    assert auth.authorization
+    assert auth.params['scheme_response']
+    assert auth.params['transaction_identifier']
+
+    assert capture = @gateway.capture(@amount, auth.authorization, authorization_validated: true)
+    assert_success capture
+
+    options = @options.merge(
+      order_id: generate_unique_id,
+      stored_credential_usage: 'USED',
+      stored_credential_initiated_reason: 'UNSCHEDULED',
+      stored_credential_transaction_id: auth.params['transaction_identifier']
+    )
+    assert next_auth = @gateway.authorize(@amount, @credit_card, options)
+    assert next_auth.authorization
+    assert next_auth.params['scheme_response']
+    assert next_auth.params['transaction_identifier']
+
+    assert capture = @gateway.capture(@amount, next_auth.authorization, authorization_validated: true)
     assert_success capture
   end
 
@@ -137,7 +210,7 @@ class RemoteWorldpayTest < Test::Unit::TestCase
   end
 
   def test_invalid_login
-    gateway = WorldpayGateway.new(:login => '', :password => '')
+    gateway = WorldpayGateway.new(:login => '', :password => '', :merchant_code_login => '')
     assert response = gateway.purchase(@amount, @credit_card, @options)
     assert_failure response
     assert_equal 'Invalid credentials', response.message
