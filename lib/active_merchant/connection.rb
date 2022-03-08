@@ -115,16 +115,12 @@ module ActiveMerchant
       return unless endpoint.scheme == "https"
 
       http.use_ssl = true
-      http.ssl_version = ssl_version if ssl_version
 
       if verify_peer
         http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-        http.ca_file     = ca_file
-        http.ca_path     = ca_path
       else
         http.verify_mode = OpenSSL::SSL::VERIFY_NONE
       end
-
     end
 
     def configure_cert(http)
