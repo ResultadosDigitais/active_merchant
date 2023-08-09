@@ -243,6 +243,8 @@ module ActiveMerchant #:nodoc:
               xml.tag! 'TOKEN-SSL', token_scope_attribute(options) do
                 xml.tag! 'paymentTokenID', payment_method.payment_cryptogram
               end
+            elsif payment_method.is_a?(EncryptedCseCreditCard)
+              puts 'deu bom'
             else
               xml.tag! CARD_CODES[card_brand(payment_method)] do
                 xml.tag! 'cardNumber', payment_method.number
