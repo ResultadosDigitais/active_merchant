@@ -245,6 +245,7 @@ module ActiveMerchant #:nodoc:
               end
             elsif payment_method.is_a?(EncryptedCseCreditCard)
               xml.tag! 'CSE-DATA' do
+                xml.tag! 'encryptedCard', payment_method.value
                 add_address(xml, (options[:billing_address] || options[:address]))
               end
             else

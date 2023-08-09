@@ -5,6 +5,8 @@ module ActiveMerchant #:nodoc:
       self.require_verification_value = false
       self.require_name = false
 
+      attr_accessor :value
+
       def credit_card?
         true
       end
