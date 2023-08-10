@@ -268,6 +268,7 @@ class WorldpayTest < Test::Unit::TestCase
     assert_not_equal headers_list[0]['Idempotency-Key'], headers_list[1]['Idempotency-Key']
     assert_success response
     @token = network_tokenization_credit_card(source: :worldpay, payment_cryptogram: "9902019934757792074")
+    @encrypted_cse = encrypted_cse_credit_card
   end
 
   def test_successful_authorize
@@ -281,14 +282,11 @@ class WorldpayTest < Test::Unit::TestCase
     assert_equal 'R50704213207145707', response.authorization
   end
 
-  def test_successful_authorize_without_name
-    credit_card = credit_card('4242424242424242', first_name: nil, last_name: nil)
+  def test_successful_cse_authorize
     response = stub_comms do
-      @gateway.authorize(@amount, credit_card, @options)
-    end.check_request do |_endpoint, data, _headers|
-      assert_match(/4242424242424242/, data)
-      assert_no_match(/cardHolderName/, data)
-      assert_match(/CARD-SSL/, data)
+      @gateway.authorize(@amount, @encrypted_cse, @options)
+    end.check_request do |endpoint, data, headers|
+      assert_match(/#{@encrypted_cse.encrypted_data}/, data)
     end.respond_with(successful_authorize_response)
     assert_success response
     assert_equal 'R50704213207145707', response.authorization
@@ -2624,6 +2622,49 @@ class WorldpayTest < Test::Unit::TestCase
                 </address>
               </cardAddress>
             </CARD-SSL>
+            <session id="asfasfasfasdgvsdzvxzcvsd" shopperIPAddress="127.0.0.1"/>
+          </paymentDetails>
+          <shopper>
+            <browser>
+              <acceptHeader>application/json, text/javascript, */*</acceptHeader>
+              <userAgentHeader>Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.19</userAgentHeader>
+            </browser>
+          </shopper>
+        </order>
+      </submit>
+      </paymentService>
+    REQUEST
+  end
+
+  def sample_cse_authorization_request
+    <<-REQUEST
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE paymentService PUBLIC "-//RBS WorldPay//DTD RBS WorldPay PaymentService v1//EN" "http://dtd.wp3.rbsworldpay.com/paymentService_v1.dtd">
+      <paymentService merchantCode="XXXXXXXXXXXXXXX" version="1.4">
+      <submit>
+        <order installationId="0000000000" orderCode="R85213364408111039">
+          <description>Products Products Products</description>
+          <amount value="100" exponent="2" currencyCode="HKD"/>
+          <orderContent>Products Products Products</orderContent>
+          <paymentDetails>
+            <CSE-DATA>
+              <encryptedData>
+                eyJhbGciOiJSU0ExXzUiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiMSIsImNvbS53b3JsZHBheS5hcGlWZXJzaW9uIjoiMS4wIiwiY29tLndvcmxkcGF5LmxpYlZlcnNpb24iOiIxLjAuNCIsImNvbS53b3JsZHBheS5jaGFubmVsIjoiamF2YXNjcmlwdCJ9.dxXmI6xyz20buL3QtDUgnICE-rJBOGY0X-dMeRDwnL3vDUIGIyysh4ED2JDEwpiZRPYi3q-j4oqDJcaR1DU_6xIaljDOAvB8afzCeb6vYhoBQhA48F-JdWXRmb6CQaEngfiySuIdGoUMop7ILnP6Or1qttc3e_L2zvrIVKIRjbdjbidRucaCsiG4isW2yqdH4zlVeYuCRUdo5dCCQqte-kPd51ufwWhbeOldMMqmEysnl88igkvdNNr14RkkkuYOmVK_RqBioBk8meNscIfCHvWrcb1wfcQQpMmze1vwf-bMo5BxsqtjxJAuCX8cESi-g1pHzYSZo1eoiCqG322VNA.qSpSVQZ2RjFdDdxt.xU-EtWVJH8cj0iLvplwrv6tF0RMVgm5ZbvQW4dbZBu9uLYIz3nPhZblXlxhupKyCjbW4MtNaCGxy-D7FviyvdRO5UR2uPk54RXIheuZ2GLHtq8NxIgG6QERpVLYDT5rNTIb5KrxNox5d2fh8SKaIM2qF.L6YG90yGR-wcXMMNc5DHmw
+              </encryptedData>
+              <cardAddress>
+                <address>
+                  <firstName>Jim</firstName>
+                  <lastName>Smith</lastName>
+                  <street>456 My Street</street>
+                  <houseName>Apt 1</houseName>
+                  <postalCode>K1C2N6</postalCode>
+                  <city>Ottawa</city>
+                  <state>ON</state>
+                  <countryCode>CA</countryCode>
+                  <telephoneNumber>(555)555-5555</telephoneNumber>
+                </address>
+              </cardAddress>
+            </CSE-DATA>
             <session id="asfasfasfasdgvsdzvxzcvsd" shopperIPAddress="127.0.0.1"/>
           </paymentDetails>
           <shopper>
