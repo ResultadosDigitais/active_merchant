@@ -2685,7 +2685,7 @@ class WorldpayTest < Test::Unit::TestCase
                   <telephoneNumber>(555)555-5555</telephoneNumber>
                 </address>
               </cardAddress>
-            </VISA-SSL>
+            </CARD-SSL>
             <session id="asfasfasfasdgvsdzvxzcvsd" shopperIPAddress="127.0.0.1"/>
           </paymentDetails>
           <shopper>
