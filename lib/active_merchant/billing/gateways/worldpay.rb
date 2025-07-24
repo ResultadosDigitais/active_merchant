@@ -327,6 +327,14 @@ module ActiveMerchant # :nodoc:
         end
       end
 
+      def add_order_content(xml, options)
+        return unless options[:order_content]
+
+        xml.orderContent do
+          xml.cdata! options[:order_content]
+        end
+      end
+
       def add_sub_merchant_data(xml, options)
         xml.subMerchantData do
           xml.pfId options[:pf_id] if options[:pf_id]
