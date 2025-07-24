@@ -201,10 +201,8 @@ module ActiveMerchant # :nodoc:
 
       def add_address(post, options)
         if address = options[:billing_address] || options[:address]
-          if address[:address1].present?
-            post[:payment][:address] = address[:address1].split[1..-1].join(' ')
-            post[:payment][:street_number] = address[:address1].split.first
-          end
+          post[:payment][:address] = address[:address1]
+          post[:payment][:street_number] = address[:address2]
           post[:payment][:city] = address[:city]
           post[:payment][:state] = address[:state]
           post[:payment][:zipcode] = address[:zip]
@@ -216,9 +214,9 @@ module ActiveMerchant # :nodoc:
       def add_invoice(post, money, options)
         post[:payment][:amount_total] = amount(money)
         post[:payment][:currency_code] = (options[:currency] || currency(money))
-        post[:payment][:merchant_payment_code] = Digest::MD5.hexdigest(order_id_override(options))
+        post[:payment][:merchant_payment_code] = options[:payment_unique_id]
         post[:payment][:instalments] = options[:instalments] || 1
-        post[:payment][:order_number] = options[:order_id][0..39] if options[:order_id]
+        post[:payment][:order_number] = options[:order_id]
       end
 
       def add_card_or_token(post, payment, options)
@@ -329,6 +327,8 @@ module ActiveMerchant # :nodoc:
       end
 
       def authorization_from(action, parameters, response)
+        return response["token"] if response["token"].present?
+
         if action == :store
           if success_from(action, response)
             "#{response.try(:[], 'token')}|#{response['payment_type_code']}"
