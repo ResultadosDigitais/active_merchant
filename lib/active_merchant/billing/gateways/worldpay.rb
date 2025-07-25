@@ -651,22 +651,17 @@ module ActiveMerchant # :nodoc:
       end
 
       def add_payment_method(xml, amount, payment_method, options)
-        if payment_method.is_a?(EncryptedCseCreditCard)
-          xml.tag! 'CSE-DATA' do
-            xml.tag! 'encryptedData', payment_method.encrypted_data
-            add_address(xml, (options[:billing_address] || options[:address]))
-          end
+        case options[:payment_type]
+        when :pay_as_order
+          add_amount_for_pay_as_order(xml, amount, payment_method, options)
+        when :encrypted_wallet
+          add_encrypted_wallet(xml, payment_method)
+        when :network_token
+          add_network_tokenization_card(xml, payment_method, options)
+        when :encrypted_cse
+          add_encrypted_cse_card(xml, payment_method, options)
         else
-          case options[:payment_type]
-          when :pay_as_order
-            add_amount_for_pay_as_order(xml, amount, payment_method, options)
-          when :encrypted_wallet
-            add_encrypted_wallet(xml, payment_method)
-          when :network_token
-            add_network_tokenization_card(xml, payment_method, options)
-          else
-            add_card_or_token(xml, payment_method, options)
-          end
+          add_card_or_token(xml, payment_method, options)
         end
       end
 
@@ -705,6 +700,18 @@ module ActiveMerchant # :nodoc:
           add_shopper_id(xml, options, false)
           add_three_d_secure(xml, options)
         end
+      end
+
+      def add_encrypted_cse_card(xml, payment_method, options)
+        xml.paymentDetails do
+          xml.tag! 'CSE-DATA' do
+            xml.tag! 'encryptedData', payment_method.encrypted_data
+            add_address(xml, (options[:billing_address] || options[:address]))
+          end
+        end
+        add_stored_credential_options(xml, options)
+        add_shopper_id(xml, options, false)
+        add_three_d_secure(xml, options)
       end
 
       def should_send_payment_cryptogram?(options, payment_method)
@@ -1151,6 +1158,8 @@ module ActiveMerchant # :nodoc:
       def payment_method_type(payment_method, options)
         type = if payment_method.is_a?(NetworkTokenizationCreditCard)
                  payment_method.encrypted_wallet? ? :encrypted_wallet : :network_token
+               elsif payment_method.is_a?(EncryptedCseCreditCard)
+                 :encrypted_cse
                else
                  wallet_type_google_pay?(options) ? :network_token : :credit
                end
