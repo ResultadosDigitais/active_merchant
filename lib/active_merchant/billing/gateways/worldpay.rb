@@ -651,15 +651,22 @@ module ActiveMerchant # :nodoc:
       end
 
       def add_payment_method(xml, amount, payment_method, options)
-        case options[:payment_type]
-        when :pay_as_order
-          add_amount_for_pay_as_order(xml, amount, payment_method, options)
-        when :encrypted_wallet
-          add_encrypted_wallet(xml, payment_method)
-        when :network_token
-          add_network_tokenization_card(xml, payment_method, options)
+        if payment_method.is_a?(EncryptedCseCreditCard)
+          xml.tag! 'CSE-DATA' do
+            xml.tag! 'encryptedData', payment_method.encrypted_data
+            add_address(xml, (options[:billing_address] || options[:address]))
+          end
         else
-          add_card_or_token(xml, payment_method, options)
+          case options[:payment_type]
+          when :pay_as_order
+            add_amount_for_pay_as_order(xml, amount, payment_method, options)
+          when :encrypted_wallet
+            add_encrypted_wallet(xml, payment_method)
+          when :network_token
+            add_network_tokenization_card(xml, payment_method, options)
+          else
+            add_card_or_token(xml, payment_method, options)
+          end
         end
       end
 
