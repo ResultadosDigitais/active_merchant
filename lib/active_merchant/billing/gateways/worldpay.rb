@@ -706,7 +706,7 @@ module ActiveMerchant # :nodoc:
         xml.paymentDetails do
           xml.tag! 'CSE-DATA' do
             xml.tag! 'encryptedData', payment_method.encrypted_data
-            add_address(xml, (options[:billing_address] || options[:address]))
+            add_address(xml, (options[:billing_address] || options[:address]), options)
           end
         end
         add_stored_credential_options(xml, options)
