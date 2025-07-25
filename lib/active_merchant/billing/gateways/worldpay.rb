@@ -708,10 +708,10 @@ module ActiveMerchant # :nodoc:
             xml.tag! 'encryptedData', payment_method.encrypted_data
             add_address(xml, (options[:billing_address] || options[:address]), options)
           end
+          add_stored_credential_options(xml, options)
+          add_shopper_id(xml, options, false)
+          add_three_d_secure(xml, options)
         end
-        add_stored_credential_options(xml, options)
-        add_shopper_id(xml, options, false)
-        add_three_d_secure(xml, options)
       end
 
       def should_send_payment_cryptogram?(options, payment_method)
