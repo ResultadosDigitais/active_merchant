@@ -75,7 +75,7 @@ module ActiveMerchant # :nodoc:
         add_customer_responsible_person(post, payment, options)
         add_additional_data(post, options)
         add_stored_credentials(post, options)
-        post[:payment][:creditcard][:auto_capture] = false
+        post[:payment][:card][:auto_capture] = false
 
         commit(:authorize, post, options)
       end
@@ -113,7 +113,7 @@ module ActiveMerchant # :nodoc:
         add_integration_key(post)
         customer_country(post, options)
         add_payment_type(post, credit_card, options)
-        post[:creditcard] = payment_details(credit_card)
+        post[:card] = payment_details(credit_card)
 
         commit(:store, post, options)
       end
@@ -230,8 +230,8 @@ module ActiveMerchant # :nodoc:
       def add_card_or_token(post, payment, options)
         payment = payment.split('|')[0] if payment.is_a?(String)
         add_payment_type(post[:payment], payment, options)
-        post[:payment][:creditcard] = payment_details(payment)
-        post[:payment][:creditcard][:soft_descriptor] = options[:soft_descriptor] if options[:soft_descriptor]
+        post[:payment][:card] = payment_details(payment)
+        post[:payment][:card][:soft_descriptor] = options[:soft_descriptor] if options[:soft_descriptor]
       end
 
       def add_payment_type(post, creditcard, options)
