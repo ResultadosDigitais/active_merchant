@@ -112,7 +112,7 @@ module ActiveMerchant # :nodoc:
         post = {}
         add_integration_key(post)
         customer_country(post, options)
-        add_payment_type(post, credit_card)
+        add_payment_type(post, credit_card, options)
         post[:creditcard] = payment_details(credit_card)
 
         commit(:store, post, options)
@@ -121,7 +121,7 @@ module ActiveMerchant # :nodoc:
       def verify(credit_card, options = {})
         post = {}
         add_integration_key(post)
-        add_payment_type(post, credit_card)
+        add_payment_type(post, credit_card, options)
         customer_country(post, options)
         post[:card] = payment_details(credit_card)
         post[:device_id] = options[:device_id] if options[:device_id]
@@ -170,7 +170,7 @@ module ActiveMerchant # :nodoc:
 
       def add_customer_data(post, payment, options)
         post[:payment][:name] = customer_name(payment, options)
-        post[:payment][:email] = 'unspecified@example.com'
+        post[:payment][:email] = options[:email].present? ? URI.encode_www_form_component(options[:email]) : 'unspecified@example.com'
         post[:payment][:document] = options[:document]
         post[:payment][:birth_date] = options[:birth_date] if options[:birth_date]
       end
@@ -229,13 +229,14 @@ module ActiveMerchant # :nodoc:
 
       def add_card_or_token(post, payment, options)
         payment = payment.split('|')[0] if payment.is_a?(String)
-        add_payment_type(post[:payment], payment)
+        add_payment_type(post[:payment], payment, options)
         post[:payment][:creditcard] = payment_details(payment)
         post[:payment][:creditcard][:soft_descriptor] = options[:soft_descriptor] if options[:soft_descriptor]
       end
 
-      def add_payment_type(post, creditcard)
-        post[:payment_type_code] = CARD_BRAND[creditcard.brand.to_sym]
+      def add_payment_type(post, creditcard, options)
+        brand = creditcard.respond_to?(:brand) ? creditcard.brand&.to_sym : nil
+        post[:payment_type_code] = options[:payment_type_code] || CARD_BRAND[brand] || 'creditcard'
       end
 
       def payment_details(payment)
@@ -335,8 +336,6 @@ module ActiveMerchant # :nodoc:
       end
 
       def authorization_from(action, parameters, response)
-        return response["token"] if response["token"].present?
-
         if action == :store
           if success_from(action, response)
             "#{response.try(:[], 'token')}|#{response['payment_type_code']}"

@@ -113,7 +113,7 @@ class EbanxTest < Test::Unit::TestCase
     response = stub_comms(@gateway, :ssl_request) do
       @gateway.purchase(@amount, @credit_card, @options)
     end.check_request do |_method, _endpoint, data, _headers|
-      assert_match %r{"payment_type_code\":\"creditcard\"}, data
+      assert_match %r{"payment_type_code\":\"visa\"}, data
     end.respond_with(successful_purchase_response)
 
     assert_success response
@@ -121,9 +121,9 @@ class EbanxTest < Test::Unit::TestCase
 
   def test_successful_purchase_with_payment_type_code_override
     response = stub_comms(@gateway, :ssl_request) do
-      @gateway.purchase(@amount, @credit_card, @options.merge({ payment_type_code: 'visa' }))
+      @gateway.purchase(@amount, @credit_card, @options.merge({ payment_type_code: 'mastercard' }))
     end.check_request do |_method, _endpoint, data, _headers|
-      assert_match %r{"payment_type_code\":\"visa\"}, data
+      assert_match %r{"payment_type_code\":\"mastercard\"}, data
     end.respond_with(successful_purchase_response)
 
     assert_success response
@@ -386,7 +386,7 @@ class EbanxTest < Test::Unit::TestCase
 
     store = @gateway.store(@credit_card, @options)
     assert_success store
-    assert_equal 'a61a7c98535718801395991b5112f888d359c2d632e2c3bb8afe75aa23f3334d7fd8dc57d7721f8162503773063de59ee85901b5714a92338c6d9c0352aee78c', store.authorization
+    assert_equal 'a61a7c98535718801395991b5112f888d359c2d632e2c3bb8afe75aa23f3334d7fd8dc57d7721f8162503773063de59ee85901b5714a92338c6d9c0352aee78c|visa', store.authorization
 
     @gateway.expects(:ssl_request).returns(successful_purchase_with_stored_card_response)
 
