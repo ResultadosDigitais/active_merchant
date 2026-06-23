@@ -38,6 +38,7 @@ class WorldpayTest < Test::Unit::TestCase
     )
     @sodexo_voucher = credit_card('6060704495764400', brand: 'sodexo')
     @options = { order_id: 1 }
+    @encrypted_cse = encrypted_cse_credit_card
     @store_options = {
       customer: '59424549c291397379f30c5c082dbed8',
       email: 'wow@example.com'
@@ -256,6 +257,11 @@ class WorldpayTest < Test::Unit::TestCase
   def test_payment_type_for_credit_card
     payment = @gateway.send(:payment_details, @credit_card)[:payment_type]
     assert_equal payment, :credit
+  end
+
+  def test_payment_type_for_encrypted_cse_credit_card
+    payment = @gateway.send(:payment_details, @encrypted_cse)[:payment_type]
+    assert_equal :encrypted_cse, payment
   end
 
   def test_successful_purchase_checking_idempotency_header
