@@ -240,15 +240,23 @@ module ActiveMerchant # :nodoc:
       end
 
       def payment_details(payment)
-        return { token: payment.payment_cryptogram } if payment.is_a?(NetworkTokenizationCreditCard)
-        return { token: payment } if payment.is_a?(String)
-
-        {
-          card_number: payment.number,
-          card_name: payment.name,
-          card_due_date: "#{payment.month}/#{payment.year}",
-          card_cvv: payment.verification_value
-        }
+        case payment
+        when NetworkTokenizationCreditCard
+          {
+            network_token_pan: payment.number,
+            network_token_expire_date: "#{payment.month}/#{payment.year}",
+            network_token_cryptogram: payment.payment_cryptogram
+          }
+        when String
+          { token: payment.split('|').first }
+        else
+          {
+            card_number: payment.number,
+            card_name: payment.name,
+            card_due_date: "#{payment.month}/#{payment.year}",
+            card_cvv: payment.verification_value
+          }
+        end
       end
 
       # we will prefer the merchant_payment_code if both fields are provided

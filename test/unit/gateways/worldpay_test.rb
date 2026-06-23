@@ -1550,6 +1550,30 @@ class WorldpayTest < Test::Unit::TestCase
     assert_equal @token, response.authorization
   end
 
+  def test_successful_authorize_with_create_token
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, @options.merge(create_token: true, token_scope: 'shopper', customer: @store_options[:customer]))
+    end.check_request do |_endpoint, data, _headers|
+      assert_match %r(<createToken\s+tokenScope="shopper"\s*/>), data
+      assert_match %r(<authenticatedShopperID>#{@store_options[:customer]}</authenticatedShopperID>), data
+    end.respond_with(successful_authorize_with_token_response)
+
+    assert_success response
+    assert_equal 'R50704213207145707|99411111780163871111|shopper|59424549c291397379f30c5c082dbed8', response.authorization
+  end
+
+  def test_successful_purchase_with_create_token
+    response = stub_comms do
+      @gateway.purchase(@amount, @credit_card, @options.merge(create_token: true, token_scope: 'shopper', customer: @store_options[:customer]))
+    end.check_request do |_endpoint, data, _headers|
+      assert_match %r(<createToken\s+tokenScope="shopper"\s*/>), data if data.include?('submit')
+    end.respond_with(successful_authorize_with_token_response, successful_capture_response)
+
+    assert_success response
+    assert_equal 'R50704213207145707|99411111780163871111|shopper|59424549c291397379f30c5c082dbed8', response.authorization
+    assert_equal 2, response.responses.size
+  end
+
   def test_successful_authorize_using_token
     response = stub_comms do
       @gateway.authorize(@amount, @token, @options)
@@ -2089,6 +2113,37 @@ class WorldpayTest < Test::Unit::TestCase
         }
       }
     }
+  end
+
+  def successful_authorize_with_token_response
+    <<~RESPONSE
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE paymentService PUBLIC "-//Bibit//DTD Bibit PaymentService v1//EN"
+                                      "http://dtd.bibit.com/paymentService_v1.dtd">
+      <paymentService version="1.4" merchantCode="XXXXXXXXXXXXXXX">
+        <reply>
+          <orderStatus orderCode="R50704213207145707">
+            <payment>
+              <paymentMethod>VISA-SSL</paymentMethod>
+              <amount value="15000" currencyCode="HKD" exponent="2" debitCreditIndicator="credit"/>
+              <lastEvent>AUTHORISED</lastEvent>
+              <CVCResultCode description="UNKNOWN"/>
+              <AVSResultCode description="UNKNOWN"/>
+              <balance accountType="IN_PROCESS_AUTHORISED">
+                <amount value="15000" currencyCode="HKD" exponent="2" debitCreditIndicator="credit"/>
+              </balance>
+              <cardNumber>4111********1111</cardNumber>
+              <riskScore value="1"/>
+            </payment>
+            <token>
+              <tokenDetails tokenEvent="NEW">
+                <paymentTokenID>99411111780163871111</paymentTokenID>
+              </tokenDetails>
+            </token>
+          </orderStatus>
+        </reply>
+      </paymentService>
+    RESPONSE
   end
 
   def successful_authorize_response

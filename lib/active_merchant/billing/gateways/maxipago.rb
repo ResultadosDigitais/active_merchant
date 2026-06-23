@@ -188,11 +188,10 @@ module ActiveMerchant # :nodoc:
         add_reference_num(xml, options)
         xml.transactionDetail do
           xml.payType do
-            xml.creditCard do
-              xml.number(creditcard.number)
-              xml.expMonth(creditcard.month)
-              xml.expYear(creditcard.year)
-              xml.cvvNumber(creditcard.verification_value)
+            if creditcard.is_a?(NetworkTokenizationCreditCard)
+              add_token(xml, creditcard, options)
+            else
+              add_credit_card(xml, creditcard)
             end
           end
         end
@@ -200,7 +199,10 @@ module ActiveMerchant # :nodoc:
           add_amount(xml, money, options)
           add_installments(xml, options)
         end
-        add_billing_address(xml, creditcard, options)
+        if creditcard.is_a?(CreditCard)
+          add_save_on_file(xml, options)
+          add_billing_address(xml, creditcard, options)
+        end
       end
 
       def add_reference_num(xml, options)
@@ -265,8 +267,6 @@ module ActiveMerchant # :nodoc:
         xml.sex options[:genre] if options[:genre]
       end
 
-      # TODO: Remove or refactor if necessary.
-      # Unused method
       def add_save_on_file(xml, options)
         return unless options[:customer_id]
 
@@ -279,19 +279,15 @@ module ActiveMerchant # :nodoc:
         end
       end
 
-      # TODO: Remove or refactor if necessary.
-      # Unused method, duplicated in `add_auth_purchase`
       def add_credit_card(xml, creditcard)
         xml.creditCard do
           xml.number(creditcard.number)
-          xml.expMonth(month_with_two_digits(creditcard.month))
+          xml.expMonth(creditcard.month)
           xml.expYear(creditcard.year)
           xml.cvvNumber(creditcard.verification_value)
         end
       end
 
-      # TODO: Remove or refactor if necessary.
-      # Unused method
       def add_token(xml, creditcard, options)
         return unless options[:customer_id]
 

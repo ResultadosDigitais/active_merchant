@@ -54,7 +54,7 @@ module ActiveMerchant # :nodoc:
       end
 
       def purchase(money, payment_method, options = {})
-        MultiResponse.run do |r|
+        MultiResponse.run(!!options[:create_token]) do |r|
           r.process { authorize(money, payment_method, options) }
           r.process { capture(money, r.authorization, options.merge(authorization_validated: true)) } unless options[:skip_capture]
         end
@@ -254,6 +254,7 @@ module ActiveMerchant # :nodoc:
               add_moto_flag(xml, options) if options.dig(:metadata, :manual_entry)
               add_additional_3ds_data(xml, options) if options[:execute_threed] && options[:three_ds_version] && options[:three_ds_version] =~ /^2/
               add_3ds_exemption(xml, options) if options[:exemption_type]
+              add_create_token(xml, options)
             end
           end
         end
@@ -855,7 +856,7 @@ module ActiveMerchant # :nodoc:
       end
 
       def add_shopper(xml, options)
-        return unless options[:execute_threed] || options[:email] || options[:customer]
+        return unless options[:execute_threed] || options[:email] || options[:customer] || options[:shopper_id]
 
         xml.shopper do
           xml.shopperEmailAddress options[:email] if options[:email]
@@ -886,7 +887,8 @@ module ActiveMerchant # :nodoc:
       end
 
       def add_authenticated_shopper_id(xml, options)
-        xml.authenticatedShopperID options[:customer] if options[:customer]
+        shopper_id = options[:customer] || options[:shopper_id]
+        xml.authenticatedShopperID shopper_id if shopper_id
       end
 
       def add_address(xml, address, options)
@@ -1117,7 +1119,16 @@ module ActiveMerchant # :nodoc:
             customer: options[:customer]
           )
         else
-          order_id
+          if raw[:payment_token_id].present?
+            authorization_from_token_details(
+              order_id:,
+              token_id: raw[:payment_token_id],
+              token_scope: options[:token_scope] || 'shopper',
+              customer: options[:customer] || options[:shopper_id]
+            )
+          else
+            order_id
+          end
         end
       end
 
@@ -1199,6 +1210,16 @@ module ActiveMerchant # :nodoc:
         return 3 if three_decimal_currency?(currency)
 
         return 2
+      end
+
+      def add_create_token(xml, options)
+        return unless options[:create_token]
+
+        if options[:token_scope]
+          xml.createToken('tokenScope' => options[:token_scope])
+        else
+          xml.createToken
+        end
       end
 
       def eligible_for_0_auth?(payment_method, options = {})
