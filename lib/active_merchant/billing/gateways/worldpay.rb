@@ -211,7 +211,7 @@ module ActiveMerchant # :nodoc:
         xml = Builder::XmlMarkup.new indent: 2
         xml.instruct! :xml, encoding: 'UTF-8'
         xml.declare! :DOCTYPE, :paymentService, :PUBLIC, '-//WorldPay//DTD WorldPay PaymentService v1//EN', 'http://dtd.worldpay.com/paymentService_v1.dtd'
-        xml.paymentService 'version' => '1.4', 'merchantCode' => @options[:login] do
+        xml.paymentService 'version' => '1.4', 'merchantCode' => merchant_code do
           yield xml
         end
         xml.target!
@@ -658,7 +658,11 @@ module ActiveMerchant # :nodoc:
         when :encrypted_wallet
           add_encrypted_wallet(xml, payment_method)
         when :network_token
-          add_network_tokenization_card(xml, payment_method, options)
+          if worldpay_stored_token?(payment_method)
+            add_worldpay_stored_token_card(xml, payment_method, options)
+          else
+            add_network_tokenization_card(xml, payment_method, options)
+          end
         when :encrypted_cse
           add_encrypted_cse_card(xml, payment_method, options)
         else
@@ -675,6 +679,18 @@ module ActiveMerchant # :nodoc:
           xml.payAsOrder 'orderCode' => payment_method do
             add_amount(xml, amount, options)
           end
+        end
+      end
+
+      def add_worldpay_stored_token_card(xml, payment_method, options)
+        xml.paymentDetails do
+          token_attributes = worldpay_token_scope_attributes(options)
+          xml.tag!('TOKEN-SSL', token_attributes) do
+            xml.paymentTokenID payment_method.payment_cryptogram
+          end
+          add_stored_credential_options(xml, options)
+          add_shopper_id(xml, options, false)
+          add_three_d_secure(xml, options)
         end
       end
 
@@ -1198,6 +1214,30 @@ module ActiveMerchant # :nodoc:
         return unless options[:credit]
 
         { 'action' => 'REFUND' }
+      end
+
+      def merchant_code
+        @options[:merchant_code_login] || @options[:login]
+      end
+
+      def worldpay_stored_token?(payment_method)
+        return false unless payment_method.is_a?(NetworkTokenizationCreditCard)
+        return false if payment_method.encrypted_wallet?
+        return false if emv_network_token?(payment_method)
+
+        payment_method.payment_cryptogram.present?
+      end
+
+      def emv_network_token?(payment_method)
+        payment_method.number.present? &&
+          payment_method.month.present? &&
+          payment_method.year.present?
+      end
+
+      def worldpay_token_scope_attributes(options)
+        return {} unless options[:token_scope].present?
+
+        { 'tokenScope' => options[:token_scope] }
       end
 
       def encoded_credentials

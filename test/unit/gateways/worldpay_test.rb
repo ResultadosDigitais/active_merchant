@@ -1800,6 +1800,48 @@ class WorldpayTest < Test::Unit::TestCase
     end
   end
 
+  def test_authorize_with_worldpay_stored_token_uses_token_ssl
+    stored_token_card = network_tokenization_credit_card(
+      nil,
+      first_name: 'John',
+      last_name: 'Smith',
+      payment_cryptogram: '99411111780163871111',
+      source: :network_token
+    )
+    stored_credential_params = stored_credential(:used, :recurring, :merchant, network_transaction_id: '3812908490218390214124')
+
+    stub_comms do
+      @gateway.authorize(
+        @amount,
+        stored_token_card,
+        @options.merge(
+          token_scope: 'shopper',
+          stored_credential: stored_credential_params,
+          stored_credential_transaction_id: '000000000000020005060720116005060'
+        )
+      )
+    end.check_request(skip_response: true) do |_endpoint, data, _headers|
+      assert_match %r(<TOKEN-SSL tokenScope="shopper">), data
+      assert_match %r(<paymentTokenID>99411111780163871111</paymentTokenID>), data
+      assert_no_match %r(<EMVCO_TOKEN-SSL), data
+      assert_match %r(<storedCredentials usage="USED" merchantInitiatedReason="RECURRING">), data
+    end
+  end
+
+  def test_merchant_code_login_is_used_in_payment_service
+    gateway = WorldpayGateway.new(
+      login: 'api_login',
+      password: 'testpassword',
+      merchant_code_login: 'WORLDPAY_MERCHANT_CODE'
+    )
+
+    stub_comms(gateway) do
+      gateway.authorize(@amount, @credit_card, @options)
+    end.check_request(skip_response: true) do |_endpoint, data, _headers|
+      assert_match %r(<paymentService version="1.4" merchantCode="WORLDPAY_MERCHANT_CODE">), data
+    end
+  end
+
   def test_network_token_type_assignation_when_google_pay
     stub_comms do
       @gateway.authorize(@amount, @google_pay_network_token, @options)
