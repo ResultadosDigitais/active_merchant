@@ -15,11 +15,11 @@ module ActiveMerchant # :nodoc:
       TAGS = ['Spreedly']
 
       CARD_BRAND = {
-        visa: "visa",
-        master: "mastercard",
-        american_express: "amex",
-        discover: "discover",
-        diners_club: "diners"
+        visa: 'visa',
+        master: 'mastercard',
+        american_express: 'amex',
+        discover: 'discover',
+        diners_club: 'diners'
       }
 
       URL_MAP = {
@@ -84,7 +84,7 @@ module ActiveMerchant # :nodoc:
         post = {}
         add_integration_key(post)
         post[:hash] = authorization
-        post[:amount] = amount(money) if options[:include_capture_amount].to_s == 'true'
+        post[:amount] = amount(money) unless options[:include_capture_amount].to_s == 'false'
 
         commit(:capture, post, options)
       end
@@ -182,6 +182,11 @@ module ActiveMerchant # :nodoc:
           post[:payment][:responsible][:name] = options[:responsible_name] if options[:responsible_name]
           post[:payment][:responsible][:document] = options[:responsible_document] if options[:responsible_document]
           post[:payment][:responsible][:birth_date] = options[:responsible_birth_date] if options[:responsible_birth_date]
+        elsif brazil_country?(post)
+          post[:payment][:responsible] = {}
+          post[:payment][:responsible][:name] = customer_name(payment, options)
+          post[:payment][:responsible][:document] = options[:document]
+          post[:payment][:responsible][:birth_date] = options[:birth_date] if options[:birth_date]
         end
       end
 
@@ -242,11 +247,15 @@ module ActiveMerchant # :nodoc:
       def payment_details(payment)
         case payment
         when NetworkTokenizationCreditCard
-          {
-            network_token_pan: payment.number,
-            network_token_expire_date: "#{payment.month}/#{payment.year}",
-            network_token_cryptogram: payment.payment_cryptogram
-          }
+          if payment.source == :ebanx
+            { token: payment.payment_cryptogram }
+          else
+            {
+              network_token_pan: payment.number,
+              network_token_expire_date: "#{payment.month}/#{payment.year}",
+              network_token_cryptogram: payment.payment_cryptogram
+            }
+          end
         when String
           { token: payment.split('|').first }
         else
@@ -337,11 +346,7 @@ module ActiveMerchant # :nodoc:
 
       def authorization_from(action, parameters, response)
         if action == :store
-          if success_from(action, response)
-            "#{response.try(:[], 'token')}|#{response['payment_type_code']}"
-          else
-            response.try(:[], 'token')
-          end
+          response.try(:[], 'token')
         else
           response.try(:[], 'payment').try(:[], 'hash')
         end
@@ -395,6 +400,10 @@ module ActiveMerchant # :nodoc:
         else
           payment.name
         end
+      end
+
+      def brazil_country?(post)
+        post.dig(:payment, :country)&.casecmp('br')&.zero?
       end
     end
   end

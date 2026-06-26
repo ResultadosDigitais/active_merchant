@@ -21,6 +21,39 @@ class EbanxTest < Test::Unit::TestCase
       month: 12,
       year: 2030
     )
+
+    @ebanx_token = network_tokenization_credit_card(
+      '4111111111111111',
+      source: :ebanx,
+      payment_cryptogram: '70d4561db7ef543509d41b5f98f8418c8cd97b718962afd91bc12bebe7f0fd37cb7058a826c3c3840bee8f9333cf7194e8ce351c6607aed650afaad4503c1332'
+    )
+  end
+
+  def test_successful_purchase_by_ebanx_token
+    response = stub_comms(@gateway, :ssl_request) do
+      @gateway.purchase(@amount, @ebanx_token, @options)
+    end.check_request do |_method, _endpoint, data, _headers|
+      assert_match %r{"token\":\"#{@ebanx_token.payment_cryptogram}\"}, data
+      assert_no_match %r{"network_token_pan"}, data
+    end.respond_with(successful_purchase_response)
+
+    assert_success response
+  end
+
+  def test_successful_purchase_sends_responsible_for_brazil
+    options = @options.merge(
+      billing_address: address(country: 'BR'),
+      document: '853.513.468-93',
+      birth_date: '10/11/1980'
+    )
+
+    response = stub_comms(@gateway, :ssl_request) do
+      @gateway.purchase(@amount, @credit_card, options)
+    end.check_request do |_method, _endpoint, data, _headers|
+      assert_match %r{"responsible\":{\"name\":\"Longbob Longsen\",\"document\":\"853.513.468-93\",\"birth_date\":\"10/11/1980\"}}, data
+    end.respond_with(successful_purchase_response)
+
+    assert_success response
   end
 
   def test_successful_purchase
@@ -303,13 +336,28 @@ class EbanxTest < Test::Unit::TestCase
   end
 
   def test_successful_capture
-    @gateway.expects(:ssl_request).returns(successful_capture_response)
+    response = stub_comms(@gateway, :ssl_request) do
+      @gateway.capture(@amount, 'authorization', @options)
+    end.check_request do |method, endpoint, _data, _headers|
+      assert_equal :get, method
+      assert_match(/amount=1\.00/, endpoint)
+    end.respond_with(successful_capture_response)
 
-    response = @gateway.capture(@amount, 'authorization', @options)
     assert_success response
     assert_equal '5dee94502bd59660b801c441ad5a703f2c4123f5fc892ccb', response.authorization
     assert_equal 'Accepted', response.message
     assert response.test?
+  end
+
+  def test_successful_capture_without_amount_when_include_capture_amount_is_false
+    response = stub_comms(@gateway, :ssl_request) do
+      @gateway.capture(@amount, 'authorization', @options.merge(include_capture_amount: false))
+    end.check_request do |method, endpoint, _data, _headers|
+      assert_equal :get, method
+      assert_no_match(/amount=/, endpoint)
+    end.respond_with(successful_capture_response)
+
+    assert_success response
   end
 
   def test_failed_partial_capture
@@ -386,7 +434,7 @@ class EbanxTest < Test::Unit::TestCase
 
     store = @gateway.store(@credit_card, @options)
     assert_success store
-    assert_equal 'a61a7c98535718801395991b5112f888d359c2d632e2c3bb8afe75aa23f3334d7fd8dc57d7721f8162503773063de59ee85901b5714a92338c6d9c0352aee78c|visa', store.authorization
+    assert_equal 'a61a7c98535718801395991b5112f888d359c2d632e2c3bb8afe75aa23f3334d7fd8dc57d7721f8162503773063de59ee85901b5714a92338c6d9c0352aee78c', store.authorization
 
     @gateway.expects(:ssl_request).returns(successful_purchase_with_stored_card_response)
 
