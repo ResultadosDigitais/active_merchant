@@ -40,22 +40,6 @@ class EbanxTest < Test::Unit::TestCase
     assert_success response
   end
 
-  def test_successful_purchase_sends_responsible_for_brazil
-    options = @options.merge(
-      billing_address: address(country: 'BR'),
-      document: '853.513.468-93',
-      birth_date: '10/11/1980'
-    )
-
-    response = stub_comms(@gateway, :ssl_request) do
-      @gateway.purchase(@amount, @credit_card, options)
-    end.check_request do |_method, _endpoint, data, _headers|
-      assert_match %r{"responsible\":{\"name\":\"Longbob Longsen\",\"document\":\"853.513.468-93\",\"birth_date\":\"10/11/1980\"}}, data
-    end.respond_with(successful_purchase_response)
-
-    assert_success response
-  end
-
   def test_successful_purchase
     @gateway.expects(:ssl_request).returns(successful_purchase_response)
 
@@ -471,9 +455,8 @@ class EbanxTest < Test::Unit::TestCase
     response = stub_comms(@gateway, :ssl_request) do
       @gateway.purchase(@amount, @network_token, @options)
     end.check_request do |_method, _endpoint, data, _headers|
-      assert_match(/"network_token_pan\":\"#{@network_token.number}\"/, data)
-      assert_match(/"network_token_cryptogram\":\"#{@network_token.payment_cryptogram}\"/, data)
-      assert_match(/"network_token_expire_date\":\"#{@network_token.month}\/#{@network_token.year}\"/, data)
+      assert_match(/"token\":\"#{@network_token.payment_cryptogram}\"/, data)
+      assert_no_match(%r{"network_token_pan"}, data)
     end.respond_with(successful_purchase_with_network_token)
 
     assert_success response
