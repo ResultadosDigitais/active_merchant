@@ -182,11 +182,6 @@ module ActiveMerchant # :nodoc:
           post[:payment][:responsible][:name] = options[:responsible_name] if options[:responsible_name]
           post[:payment][:responsible][:document] = options[:responsible_document] if options[:responsible_document]
           post[:payment][:responsible][:birth_date] = options[:responsible_birth_date] if options[:responsible_birth_date]
-        elsif brazil_country?(post)
-          post[:payment][:responsible] = {}
-          post[:payment][:responsible][:name] = customer_name(payment, options)
-          post[:payment][:responsible][:document] = options[:document]
-          post[:payment][:responsible][:birth_date] = options[:birth_date] if options[:birth_date]
         end
       end
 
@@ -247,15 +242,7 @@ module ActiveMerchant # :nodoc:
       def payment_details(payment)
         case payment
         when NetworkTokenizationCreditCard
-          if payment.source == :ebanx
-            { token: payment.payment_cryptogram }
-          else
-            {
-              network_token_pan: payment.number,
-              network_token_expire_date: "#{payment.month}/#{payment.year}",
-              network_token_cryptogram: payment.payment_cryptogram
-            }
-          end
+          { token: payment.payment_cryptogram }
         when String
           { token: payment.split('|').first }
         else
@@ -400,10 +387,6 @@ module ActiveMerchant # :nodoc:
         else
           payment.name
         end
-      end
-
-      def brazil_country?(post)
-        post.dig(:payment, :country)&.casecmp('br')&.zero?
       end
     end
   end
