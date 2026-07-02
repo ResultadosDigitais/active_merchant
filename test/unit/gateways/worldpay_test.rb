@@ -80,6 +80,82 @@ class WorldpayTest < Test::Unit::TestCase
     assert_success response
   end
 
+  def test_authorize_passes_stored_credential_normalized_initial
+    options = @options.merge(
+      stored_credential: {
+        initial_transaction: true
+      }
+    )
+    
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, options)
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<storedCredentials usage="FIRST"/>), data
+    end.respond_with(successful_authorize_response)
+    
+    assert_success response
+  end
+
+  def test_authorize_passes_stored_credential_normalized_subsequent_installment
+    options = @options.merge(
+      stored_credential: {
+        initial_transaction: false,
+        reason_type: 'installment',
+        network_transaction_id: '000000000000020005',
+        supplementary_id: '550e8400-e29b-41d4-a716-446655440000'
+      }
+    )
+    
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, options)
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<storedCredentials usage="USED" merchantInitiatedReason="INSTALMENT">), data
+      assert_match %r(<schemeTransactionIdentifier>000000000000020005</schemeTransactionIdentifier>), data
+      assert_match %r(<supplementaryId>550e8400-e29b-41d4-a716-446655440000</supplementaryId>), data
+    end.respond_with(successful_authorize_response)
+    
+    assert_success response
+  end
+
+  def test_authorize_passes_stored_credential_normalized_subsequent_recurring
+    options = @options.merge(
+      stored_credential: {
+        initial_transaction: false,
+        reason_type: 'recurring',
+        network_transaction_id: '000000000000020006'
+      }
+    )
+    
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, options)
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<storedCredentials usage="USED" merchantInitiatedReason="RECURRING">), data
+      assert_match %r(<schemeTransactionIdentifier>000000000000020006</schemeTransactionIdentifier>), data
+      assert_no_match %r(supplementaryId), data
+    end.respond_with(successful_authorize_response)
+    
+    assert_success response
+  end
+
+  def test_authorize_passes_stored_credential_normalized_subsequent_unscheduled
+    options = @options.merge(
+      stored_credential: {
+        initial_transaction: false,
+        reason_type: 'unscheduled'
+      }
+    )
+    
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, options)
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<storedCredentials usage="USED" merchantInitiatedReason="UNSCHEDULED">), data
+      assert_no_match %r(schemeTransactionIdentifier), data
+      assert_no_match %r(supplementaryId), data
+    end.respond_with(successful_authorize_response)
+    
+    assert_success response
+  end
+
   def test_failed_authorize
     response = stub_comms do
       @gateway.authorize(@amount, @credit_card, @options)
