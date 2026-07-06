@@ -170,7 +170,7 @@ module ActiveMerchant # :nodoc:
 
       def add_customer_data(post, payment, options)
         post[:payment][:name] = customer_name(payment, options)
-        post[:payment][:email] = options[:email].present? ? URI.encode_www_form_component(options[:email]) : 'unspecified@example.com'
+        post[:payment][:email] = options[:email] || "unspecified@example.com"
         post[:payment][:document] = options[:document]
         post[:payment][:birth_date] = options[:birth_date] if options[:birth_date]
       end
