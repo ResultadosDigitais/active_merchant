@@ -292,6 +292,7 @@ module ActiveMerchant #:nodoc:
 
           xml.tag! 'storedCredentials', 'usage' => 'USED', 'merchantInitiatedReason' => reason do
             xml.tag! 'schemeTransactionIdentifier', options[:stored_credential][:network_transaction_id] if options[:stored_credential][:network_transaction_id]
+            xml.tag! 'supplementaryId', options[:stored_credential][:supplementary_id] if options[:stored_credential][:supplementary_id]
           end
         end
       end
