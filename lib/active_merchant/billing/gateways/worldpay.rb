@@ -855,6 +855,7 @@ module ActiveMerchant # :nodoc:
 
         xml.storedCredentials stored_credential_params do
           xml.schemeTransactionIdentifier network_transaction_id(options) if send_network_transaction_id?(options)
+          xml.tag! 'supplementaryId', options[:stored_credential][:supplementary_id] if options[:stored_credential][:supplementary_id]
         end
       end
 
