@@ -472,11 +472,11 @@ class EbanxTest < Test::Unit::TestCase
     assert_equal %w[BR MX CO CL AR PE BO EC CR DO GT PA PY UY], EbanxGateway.supported_countries
   end
 
-  def test_email_is_url_encoded_in_customer_data
+  def test_email_is_passed_through_in_customer_data
     gateway = EbanxGateway.new(integration_key: 'test_key')
 
     post = { payment: {} }
-    payment = stub(name: 'John Doe') # You can stub the payment object if needed
+    payment = stub(name: 'John Doe')
     options = {
       email: 'john+test@example.com',
       document: '12345678901',
@@ -485,8 +485,7 @@ class EbanxTest < Test::Unit::TestCase
 
     gateway.send(:add_customer_data, post, payment, options)
 
-    expected_encoded_email = URI.encode_www_form_component('john+test@example.com')
-    assert_equal expected_encoded_email, post[:payment][:email]
+    assert_equal 'john+test@example.com', post[:payment][:email]
   end
 
   def test_successful_purchase_with_payment_taxes_iva_co
