@@ -593,7 +593,7 @@ class WorldpayTest < Test::Unit::TestCase
     response = stub_comms do
       @gateway.authorize(@amount, @credit_card, options)
     end.check_request do |endpoint, data, headers|
-      assert_match %r(<storedCredentials usage="FIRST"/>), data
+      assert_match %r(<storedCredentials usage="FIRST">\s*</storedCredentials>), data
     end.respond_with(successful_authorize_response)
     
     assert_success response
