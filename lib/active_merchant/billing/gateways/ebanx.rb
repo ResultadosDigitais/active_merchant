@@ -235,8 +235,8 @@ module ActiveMerchant # :nodoc:
       end
 
       def add_payment_type(post, creditcard, options)
-        brand = creditcard.respond_to?(:brand) ? creditcard.brand&.to_sym : nil
-        post[:payment_type_code] = options[:payment_type_code] || CARD_BRAND[brand] || 'creditcard'
+        creditcard_branch = CARD_BRAND[creditcard.try(:brand)&to_sym]
+        post[:payment_type_code] =  options[:payment_type_code] || creditcard_branch || 'creditcard'
       end
 
       def payment_details(payment)
