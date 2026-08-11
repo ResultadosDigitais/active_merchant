@@ -54,7 +54,7 @@ module ActiveMerchant # :nodoc:
       end
 
       def purchase(money, payment_method, options = {})
-        MultiResponse.run do |r|
+        MultiResponse.run(!!options[:create_token]) do |r|
           r.process { authorize(money, payment_method, options) }
           r.process { capture(money, r.authorization, options.merge(authorization_validated: true)) } unless options[:skip_capture]
         end
@@ -211,7 +211,7 @@ module ActiveMerchant # :nodoc:
         xml = Builder::XmlMarkup.new indent: 2
         xml.instruct! :xml, encoding: 'UTF-8'
         xml.declare! :DOCTYPE, :paymentService, :PUBLIC, '-//WorldPay//DTD WorldPay PaymentService v1//EN', 'http://dtd.worldpay.com/paymentService_v1.dtd'
-        xml.paymentService 'version' => '1.4', 'merchantCode' => @options[:login] do
+        xml.paymentService 'version' => '1.4', 'merchantCode' => merchant_code do
           yield xml
         end
         xml.target!
@@ -254,6 +254,7 @@ module ActiveMerchant # :nodoc:
               add_moto_flag(xml, options) if options.dig(:metadata, :manual_entry)
               add_additional_3ds_data(xml, options) if options[:execute_threed] && options[:three_ds_version] && options[:three_ds_version] =~ /^2/
               add_3ds_exemption(xml, options) if options[:exemption_type]
+              add_create_token(xml, options)
             end
           end
         end
@@ -345,12 +346,17 @@ module ActiveMerchant # :nodoc:
 
       def build_capture_request(money, authorization, options)
         build_order_modify_request(authorization) do |xml|
-          xml.capture do
+          xml.tag! 'capture', capture_tag_attributes(options) do
             time = Time.now
             xml.date 'dayOfMonth' => time.day, 'month' => time.month, 'year' => time.year
             add_amount(xml, money, options)
           end
         end
+      end
+
+      def capture_tag_attributes(options)
+        options ||= {}
+        options[:order_reference] ? { 'reference' => options[:order_reference] } : {}
       end
 
       def build_void_request(authorization, options)
@@ -652,7 +658,13 @@ module ActiveMerchant # :nodoc:
         when :encrypted_wallet
           add_encrypted_wallet(xml, payment_method)
         when :network_token
-          add_network_tokenization_card(xml, payment_method, options)
+          if worldpay_stored_token?(payment_method)
+            add_worldpay_stored_token_card(xml, payment_method, options)
+          else
+            add_network_tokenization_card(xml, payment_method, options)
+          end
+        when :encrypted_cse
+          add_encrypted_cse_card(xml, payment_method, options)
         else
           add_card_or_token(xml, payment_method, options)
         end
@@ -667,6 +679,18 @@ module ActiveMerchant # :nodoc:
           xml.payAsOrder 'orderCode' => payment_method do
             add_amount(xml, amount, options)
           end
+        end
+      end
+
+      def add_worldpay_stored_token_card(xml, payment_method, options)
+        xml.paymentDetails do
+          token_attributes = worldpay_token_scope_attributes(options)
+          xml.tag!('TOKEN-SSL', token_attributes) do
+            xml.paymentTokenID payment_method.payment_cryptogram
+          end
+          add_stored_credential_options(xml, options)
+          add_shopper_id(xml, options, false)
+          add_three_d_secure(xml, options)
         end
       end
 
@@ -688,6 +712,18 @@ module ActiveMerchant # :nodoc:
             xml.cryptogram payment_method.payment_cryptogram unless should_send_payment_cryptogram?(options, payment_method)
             eci = eci_value(payment_method, options)
             xml.eciIndicator eci if eci.present?
+          end
+          add_stored_credential_options(xml, options)
+          add_shopper_id(xml, options, false)
+          add_three_d_secure(xml, options)
+        end
+      end
+
+      def add_encrypted_cse_card(xml, payment_method, options)
+        xml.paymentDetails do
+          xml.tag! 'CSE-DATA' do
+            xml.tag! 'encryptedData', payment_method.encrypted_data
+            add_address(xml, (options[:billing_address] || options[:address]), options)
           end
           add_stored_credential_options(xml, options)
           add_shopper_id(xml, options, false)
@@ -819,6 +855,7 @@ module ActiveMerchant # :nodoc:
 
         xml.storedCredentials stored_credential_params do
           xml.schemeTransactionIdentifier network_transaction_id(options) if send_network_transaction_id?(options)
+          xml.tag! 'supplementaryId', options[:stored_credential][:supplementary_id] if options[:stored_credential][:supplementary_id]
         end
       end
 
@@ -836,7 +873,7 @@ module ActiveMerchant # :nodoc:
       end
 
       def add_shopper(xml, options)
-        return unless options[:execute_threed] || options[:email] || options[:customer]
+        return unless options[:execute_threed] || options[:email] || options[:customer] || options[:shopper_id]
 
         xml.shopper do
           xml.shopperEmailAddress options[:email] if options[:email]
@@ -867,7 +904,8 @@ module ActiveMerchant # :nodoc:
       end
 
       def add_authenticated_shopper_id(xml, options)
-        xml.authenticatedShopperID options[:customer] if options[:customer]
+        shopper_id = options[:customer] || options[:shopper_id]
+        xml.authenticatedShopperID shopper_id if shopper_id
       end
 
       def add_address(xml, address, options)
@@ -1098,7 +1136,16 @@ module ActiveMerchant # :nodoc:
             customer: options[:customer]
           )
         else
-          order_id
+          if raw[:payment_token_id].present?
+            authorization_from_token_details(
+              order_id:,
+              token_id: raw[:payment_token_id],
+              token_scope: options[:token_scope] || 'shopper',
+              customer: options[:customer] || options[:shopper_id]
+            )
+          else
+            order_id
+          end
         end
       end
 
@@ -1139,6 +1186,8 @@ module ActiveMerchant # :nodoc:
       def payment_method_type(payment_method, options)
         type = if payment_method.is_a?(NetworkTokenizationCreditCard)
                  payment_method.encrypted_wallet? ? :encrypted_wallet : :network_token
+               elsif payment_method.is_a?(EncryptedCseCreditCard)
+                 :encrypted_cse
                else
                  wallet_type_google_pay?(options) ? :network_token : :credit
                end
@@ -1168,6 +1217,30 @@ module ActiveMerchant # :nodoc:
         { 'action' => 'REFUND' }
       end
 
+      def merchant_code
+        @options[:merchant_code_login] || @options[:login]
+      end
+
+      def worldpay_stored_token?(payment_method)
+        return false unless payment_method.is_a?(NetworkTokenizationCreditCard)
+        return false if payment_method.encrypted_wallet?
+        return false if emv_network_token?(payment_method)
+
+        payment_method.payment_cryptogram.present?
+      end
+
+      def emv_network_token?(payment_method)
+        payment_method.number.present? &&
+          payment_method.month.present? &&
+          payment_method.year.present?
+      end
+
+      def worldpay_token_scope_attributes(options)
+        return {} unless options[:token_scope].present?
+
+        { 'tokenScope' => options[:token_scope] }
+      end
+
       def encoded_credentials
         credentials = "#{@options[:login]}:#{@options[:password]}"
         "Basic #{[credentials].pack('m').strip}"
@@ -1178,6 +1251,16 @@ module ActiveMerchant # :nodoc:
         return 3 if three_decimal_currency?(currency)
 
         return 2
+      end
+
+      def add_create_token(xml, options)
+        return unless options[:create_token]
+
+        if options[:token_scope]
+          xml.createToken('tokenScope' => options[:token_scope])
+        else
+          xml.createToken
+        end
       end
 
       def eligible_for_0_auth?(payment_method, options = {})

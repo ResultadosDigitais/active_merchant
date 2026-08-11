@@ -139,6 +139,15 @@ module ActiveMerchant
     HOME_DIR = RUBY_PLATFORM.match?('mswin32') ? ENV['HOMEPATH'] : ENV['HOME'] unless defined?(HOME_DIR)
     LOCAL_CREDENTIALS = File.join(HOME_DIR.to_s, '.active_merchant/fixtures.yml') unless defined?(LOCAL_CREDENTIALS)
     DEFAULT_CREDENTIALS = File.join(File.dirname(__FILE__), 'fixtures.yml') unless defined?(DEFAULT_CREDENTIALS)
+    DEFAULT_ENCRYPTED_DATA = 'eyJhbGciOiJSU0ExXzUiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiMSIsImNvbS53b3JsZHBheS5hcGlWZXJza' \
+                             'W9uIjoiMS4wIiwiY29tLndvcmxkcGF5LmxpYlZlcnNpb24iOiIxLjAuNCIsImNvbS53b3JsZHBheS5jaGFubm' \
+                             'VsIjoiamF2YXNjcmlwdCJ9.dxXmI6xyz20buL3QtDUgnICE-rJBOGY0X-dMeRDwnL3vDUIGIyysh4ED2JDEwp' \
+                             'iZRPYi3q-j4oqDJcaR1DU_6xIaljDOAvB8afzCeb6vYhoBQhA48F-JdWXRmb6CQaEngfiySuIdGoUMop7ILnP' \
+                             '6Or1qttc3e_L2zvrIVKIRjbdjbidRucaCsiG4isW2yqdH4zlVeYuCRUdo5dCCQqte-kPd51ufwWhbeOldMMqm' \
+                             'Eysnl88igkvdNNr14RkkkuYOmVK_RqBioBk8meNscIfCHvWrcb1wfcQQpMmze1vwf-bMo5BxsqtjxJAuCX8cE' \
+                             'Si-g1pHzYSZo1eoiCqG322VNA.qSpSVQZ2RjFdDdxt.xU-EtWVJH8cj0iLvplwrv6tF0RMVgm5ZbvQW4dbZBu' \
+                             '9uLYIz3nPhZblXlxhupKyCjbW4MtNaCGxy-D7FviyvdRO5UR2uPk54RXIheuZ2GLHtq8NxIgG6QERpVLYDT5r' \
+                             'NTIb5KrxNox5d2fh8SKaIM2qF.L6YG90yGR-wcXMMNc5DHmw'.freeze
 
     private
 
@@ -187,6 +196,12 @@ module ActiveMerchant
       }.update(options)
 
       Billing::NetworkTokenizationCreditCard.new(defaults)
+    end
+
+    def encrypted_cse_credit_card(encrypted_data = DEFAULT_ENCRYPTED_DATA, options = {})
+      defaults = { :encrypted_data => encrypted_data }.update(options)
+
+      Billing::EncryptedCseCreditCard.new(defaults)
     end
 
     def check(options = {})

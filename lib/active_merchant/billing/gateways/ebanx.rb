@@ -14,6 +14,16 @@ module ActiveMerchant # :nodoc:
 
       TAGS = ['Spreedly']
 
+      UNSPECIFIED_EMAIL = 'unspecified@example.com'
+
+      CARD_BRAND = {
+        visa: 'visa',
+        master: 'mastercard',
+        american_express: 'amex',
+        discover: 'discover',
+        diners_club: 'diners'
+      }
+
       URL_MAP = {
         purchase: 'direct',
         authorize: 'direct',
@@ -76,7 +86,7 @@ module ActiveMerchant # :nodoc:
         post = {}
         add_integration_key(post)
         post[:hash] = authorization
-        post[:amount] = amount(money) if options[:include_capture_amount].to_s == 'true'
+        post[:amount] = amount(money) unless options[:include_capture_amount].to_s == 'false'
 
         commit(:capture, post, options)
       end
@@ -104,7 +114,7 @@ module ActiveMerchant # :nodoc:
         post = {}
         add_integration_key(post)
         customer_country(post, options)
-        add_payment_type(post, options)
+        add_payment_type(post, credit_card, options)
         post[:creditcard] = payment_details(credit_card)
 
         commit(:store, post, options)
@@ -113,7 +123,7 @@ module ActiveMerchant # :nodoc:
       def verify(credit_card, options = {})
         post = {}
         add_integration_key(post)
-        add_payment_type(post, options)
+        add_payment_type(post, credit_card, options)
         customer_country(post, options)
         post[:card] = payment_details(credit_card)
         post[:device_id] = options[:device_id] if options[:device_id]
@@ -162,7 +172,7 @@ module ActiveMerchant # :nodoc:
 
       def add_customer_data(post, payment, options)
         post[:payment][:name] = customer_name(payment, options)
-        post[:payment][:email] = URI.encode_www_form_component(options[:email]) if options[:email]
+        post[:payment][:email] = options[:email] || UNSPECIFIED_EMAIL
         post[:payment][:document] = options[:document]
         post[:payment][:birth_date] = options[:birth_date] if options[:birth_date]
       end
@@ -201,10 +211,8 @@ module ActiveMerchant # :nodoc:
 
       def add_address(post, options)
         if address = options[:billing_address] || options[:address]
-          if address[:address1].present?
-            post[:payment][:address] = address[:address1].split[1..-1].join(' ')
-            post[:payment][:street_number] = address[:address1].split.first
-          end
+          post[:payment][:address] = address[:address1]
+          post[:payment][:street_number] = address[:address2]
           post[:payment][:city] = address[:city]
           post[:payment][:state] = address[:state]
           post[:payment][:zipcode] = address[:zip]
@@ -216,32 +224,29 @@ module ActiveMerchant # :nodoc:
       def add_invoice(post, money, options)
         post[:payment][:amount_total] = amount(money)
         post[:payment][:currency_code] = (options[:currency] || currency(money))
-        post[:payment][:merchant_payment_code] = Digest::MD5.hexdigest(order_id_override(options))
+        post[:payment][:merchant_payment_code] = options[:payment_unique_id]
         post[:payment][:instalments] = options[:instalments] || 1
-        post[:payment][:order_number] = options[:order_id][0..39] if options[:order_id]
+        post[:payment][:order_number] = options[:order_id]
       end
 
       def add_card_or_token(post, payment, options)
         payment = payment.split('|')[0] if payment.is_a?(String)
-        add_payment_type(post[:payment], options)
+        add_payment_type(post[:payment], payment, options)
         post[:payment][:creditcard] = payment_details(payment)
         post[:payment][:creditcard][:soft_descriptor] = options[:soft_descriptor] if options[:soft_descriptor]
       end
 
-      def add_payment_type(post, options)
-        post[:payment_type_code] = options[:payment_type_code] || 'creditcard'
+      def add_payment_type(post, creditcard, options)
+        creditcard_branch = CARD_BRAND[creditcard.try(:brand)&.to_sym]
+        post[:payment_type_code] =  options[:payment_type_code] || creditcard_branch || 'creditcard'
       end
 
       def payment_details(payment)
         case payment
         when NetworkTokenizationCreditCard
-          {
-            network_token_pan: payment.number,
-            network_token_expire_date: "#{payment.month}/#{payment.year}",
-            network_token_cryptogram: payment.payment_cryptogram
-          }
+          { token: payment.payment_cryptogram }
         when String
-          { token: payment }
+          { token: payment.split('|').first }
         else
           {
             card_number: payment.number,
@@ -330,11 +335,7 @@ module ActiveMerchant # :nodoc:
 
       def authorization_from(action, parameters, response)
         if action == :store
-          if success_from(action, response)
-            "#{response.try(:[], 'token')}|#{response['payment_type_code']}"
-          else
-            response.try(:[], 'token')
-          end
+          response.try(:[], 'token')
         else
           response.try(:[], 'payment').try(:[], 'hash')
         end

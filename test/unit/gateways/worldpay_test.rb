@@ -38,6 +38,7 @@ class WorldpayTest < Test::Unit::TestCase
     )
     @sodexo_voucher = credit_card('6060704495764400', brand: 'sodexo')
     @options = { order_id: 1 }
+    @encrypted_cse = encrypted_cse_credit_card
     @store_options = {
       customer: '59424549c291397379f30c5c082dbed8',
       email: 'wow@example.com'
@@ -258,6 +259,11 @@ class WorldpayTest < Test::Unit::TestCase
     assert_equal payment, :credit
   end
 
+  def test_payment_type_for_encrypted_cse_credit_card
+    payment = @gateway.send(:payment_details, @encrypted_cse)[:payment_type]
+    assert_equal :encrypted_cse, payment
+  end
+
   def test_successful_purchase_checking_idempotency_header
     headers_list = []
     response = stub_comms do
@@ -267,6 +273,7 @@ class WorldpayTest < Test::Unit::TestCase
     end.respond_with(successful_authorize_response, successful_capture_response)
     assert_not_equal headers_list[0]['Idempotency-Key'], headers_list[1]['Idempotency-Key']
     assert_success response
+    @encrypted_cse = encrypted_cse_credit_card
   end
 
   def test_successful_authorize
@@ -361,6 +368,16 @@ class WorldpayTest < Test::Unit::TestCase
     end
 
     assert_equal 'Invalid encrypted wallet source', error.message
+  end
+
+  def test_successful_cse_authorize
+    response = stub_comms do
+      @gateway.authorize(@amount, @encrypted_cse, @options)
+    end.check_request do |endpoint, data, headers|
+      assert_match(/#{@encrypted_cse.encrypted_data}/, data)
+    end.respond_with(successful_authorize_response)
+    assert_success response
+    assert_equal 'R50704213207145707', response.authorization
   end
 
   def test_successful_authorize_by_reference
@@ -563,6 +580,82 @@ class WorldpayTest < Test::Unit::TestCase
       assert_match %r(<subName>Example Shop</subName>), data
       assert_match %r(<subId>1234567</subId>), data
     end.respond_with(successful_authorize_response)
+    assert_success response
+  end
+
+  def test_authorize_passes_stored_credential_normalized_initial
+    options = @options.merge(
+      stored_credential: {
+        initial_transaction: true
+      }
+    )
+    
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, options)
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<storedCredentials usage="FIRST">\s*</storedCredentials>), data
+    end.respond_with(successful_authorize_response)
+    
+    assert_success response
+  end
+
+  def test_authorize_passes_stored_credential_normalized_subsequent_installment
+    options = @options.merge(
+      stored_credential: {
+        initial_transaction: false,
+        reason_type: 'installment',
+        network_transaction_id: '000000000000020005',
+        supplementary_id: '550e8400-e29b-41d4-a716-446655440000'
+      }
+    )
+    
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, options)
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<storedCredentials usage="USED" merchantInitiatedReason="INSTALMENT">), data
+      assert_match %r(<schemeTransactionIdentifier>000000000000020005</schemeTransactionIdentifier>), data
+      assert_match %r(<supplementaryId>550e8400-e29b-41d4-a716-446655440000</supplementaryId>), data
+    end.respond_with(successful_authorize_response)
+    
+    assert_success response
+  end
+
+  def test_authorize_passes_stored_credential_normalized_subsequent_recurring
+    options = @options.merge(
+      stored_credential: {
+        initial_transaction: false,
+        reason_type: 'recurring',
+        network_transaction_id: '000000000000020006'
+      }
+    )
+    
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, options)
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<storedCredentials usage="USED" merchantInitiatedReason="RECURRING">), data
+      assert_match %r(<schemeTransactionIdentifier>000000000000020006</schemeTransactionIdentifier>), data
+      assert_no_match %r(supplementaryId), data
+    end.respond_with(successful_authorize_response)
+    
+    assert_success response
+  end
+
+  def test_authorize_passes_stored_credential_normalized_subsequent_unscheduled
+    options = @options.merge(
+      stored_credential: {
+        initial_transaction: false,
+        reason_type: 'unscheduled'
+      }
+    )
+    
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, options)
+    end.check_request do |endpoint, data, headers|
+      assert_match %r(<storedCredentials usage="USED" merchantInitiatedReason="UNSCHEDULED">), data
+      assert_no_match %r(schemeTransactionIdentifier), data
+      assert_no_match %r(supplementaryId), data
+    end.respond_with(successful_authorize_response)
+    
     assert_success response
   end
 
@@ -1533,6 +1626,30 @@ class WorldpayTest < Test::Unit::TestCase
     assert_equal @token, response.authorization
   end
 
+  def test_successful_authorize_with_create_token
+    response = stub_comms do
+      @gateway.authorize(@amount, @credit_card, @options.merge(create_token: true, token_scope: 'shopper', customer: @store_options[:customer]))
+    end.check_request do |_endpoint, data, _headers|
+      assert_match %r(<createToken\s+tokenScope="shopper"\s*/>), data
+      assert_match %r(<authenticatedShopperID>#{@store_options[:customer]}</authenticatedShopperID>), data
+    end.respond_with(successful_authorize_with_token_response)
+
+    assert_success response
+    assert_equal 'R50704213207145707|99411111780163871111|shopper|59424549c291397379f30c5c082dbed8', response.authorization
+  end
+
+  def test_successful_purchase_with_create_token
+    response = stub_comms do
+      @gateway.purchase(@amount, @credit_card, @options.merge(create_token: true, token_scope: 'shopper', customer: @store_options[:customer]))
+    end.check_request do |_endpoint, data, _headers|
+      assert_match %r(<createToken\s+tokenScope="shopper"\s*/>), data if data.include?('submit')
+    end.respond_with(successful_authorize_with_token_response, successful_capture_response)
+
+    assert_success response
+    assert_equal 'R50704213207145707|99411111780163871111|shopper|59424549c291397379f30c5c082dbed8', response.authorization
+    assert_equal 2, response.responses.size
+  end
+
   def test_successful_authorize_using_token
     response = stub_comms do
       @gateway.authorize(@amount, @token, @options)
@@ -1756,6 +1873,48 @@ class WorldpayTest < Test::Unit::TestCase
       @gateway.authorize(@amount, @nt_credit_card, @options)
     end.check_request(skip_response: true) do |_endpoint, data, _headers|
       assert_match %r(<EMVCO_TOKEN-SSL type="NETWORKTOKEN">), data
+    end
+  end
+
+  def test_authorize_with_worldpay_stored_token_uses_token_ssl
+    stored_token_card = network_tokenization_credit_card(
+      nil,
+      first_name: 'John',
+      last_name: 'Smith',
+      payment_cryptogram: '99411111780163871111',
+      source: :network_token
+    )
+    stored_credential_params = stored_credential(:used, :recurring, :merchant, network_transaction_id: '3812908490218390214124')
+
+    stub_comms do
+      @gateway.authorize(
+        @amount,
+        stored_token_card,
+        @options.merge(
+          token_scope: 'shopper',
+          stored_credential: stored_credential_params,
+          stored_credential_transaction_id: '000000000000020005060720116005060'
+        )
+      )
+    end.check_request(skip_response: true) do |_endpoint, data, _headers|
+      assert_match %r(<TOKEN-SSL tokenScope="shopper">), data
+      assert_match %r(<paymentTokenID>99411111780163871111</paymentTokenID>), data
+      assert_no_match %r(<EMVCO_TOKEN-SSL), data
+      assert_match %r(<storedCredentials usage="USED" merchantInitiatedReason="RECURRING">), data
+    end
+  end
+
+  def test_merchant_code_login_is_used_in_payment_service
+    gateway = WorldpayGateway.new(
+      login: 'api_login',
+      password: 'testpassword',
+      merchant_code_login: 'WORLDPAY_MERCHANT_CODE'
+    )
+
+    stub_comms(gateway) do
+      gateway.authorize(@amount, @credit_card, @options)
+    end.check_request(skip_response: true) do |_endpoint, data, _headers|
+      assert_match %r(<paymentService version="1.4" merchantCode="WORLDPAY_MERCHANT_CODE">), data
     end
   end
 
@@ -2072,6 +2231,37 @@ class WorldpayTest < Test::Unit::TestCase
         }
       }
     }
+  end
+
+  def successful_authorize_with_token_response
+    <<~RESPONSE
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE paymentService PUBLIC "-//Bibit//DTD Bibit PaymentService v1//EN"
+                                      "http://dtd.bibit.com/paymentService_v1.dtd">
+      <paymentService version="1.4" merchantCode="XXXXXXXXXXXXXXX">
+        <reply>
+          <orderStatus orderCode="R50704213207145707">
+            <payment>
+              <paymentMethod>VISA-SSL</paymentMethod>
+              <amount value="15000" currencyCode="HKD" exponent="2" debitCreditIndicator="credit"/>
+              <lastEvent>AUTHORISED</lastEvent>
+              <CVCResultCode description="UNKNOWN"/>
+              <AVSResultCode description="UNKNOWN"/>
+              <balance accountType="IN_PROCESS_AUTHORISED">
+                <amount value="15000" currencyCode="HKD" exponent="2" debitCreditIndicator="credit"/>
+              </balance>
+              <cardNumber>4111********1111</cardNumber>
+              <riskScore value="1"/>
+            </payment>
+            <token>
+              <tokenDetails tokenEvent="NEW">
+                <paymentTokenID>99411111780163871111</paymentTokenID>
+              </tokenDetails>
+            </token>
+          </orderStatus>
+        </reply>
+      </paymentService>
+    RESPONSE
   end
 
   def successful_authorize_response
@@ -2675,6 +2865,49 @@ class WorldpayTest < Test::Unit::TestCase
                 </address>
               </cardAddress>
             </CARD-SSL>
+            <session id="asfasfasfasdgvsdzvxzcvsd" shopperIPAddress="127.0.0.1"/>
+          </paymentDetails>
+          <shopper>
+            <browser>
+              <acceptHeader>application/json, text/javascript, */*</acceptHeader>
+              <userAgentHeader>Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.19</userAgentHeader>
+            </browser>
+          </shopper>
+        </order>
+      </submit>
+      </paymentService>
+    REQUEST
+  end
+
+  def sample_cse_authorization_request
+    <<-REQUEST
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE paymentService PUBLIC "-//RBS WorldPay//DTD RBS WorldPay PaymentService v1//EN" "http://dtd.wp3.rbsworldpay.com/paymentService_v1.dtd">
+      <paymentService merchantCode="XXXXXXXXXXXXXXX" version="1.4">
+      <submit>
+        <order installationId="0000000000" orderCode="R85213364408111039">
+          <description>Products Products Products</description>
+          <amount value="100" exponent="2" currencyCode="HKD"/>
+          <orderContent>Products Products Products</orderContent>
+          <paymentDetails>
+            <CSE-DATA>
+              <encryptedData>
+                eyJhbGciOiJSU0ExXzUiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiMSIsImNvbS53b3JsZHBheS5hcGlWZXJzaW9uIjoiMS4wIiwiY29tLndvcmxkcGF5LmxpYlZlcnNpb24iOiIxLjAuNCIsImNvbS53b3JsZHBheS5jaGFubmVsIjoiamF2YXNjcmlwdCJ9.dxXmI6xyz20buL3QtDUgnICE-rJBOGY0X-dMeRDwnL3vDUIGIyysh4ED2JDEwpiZRPYi3q-j4oqDJcaR1DU_6xIaljDOAvB8afzCeb6vYhoBQhA48F-JdWXRmb6CQaEngfiySuIdGoUMop7ILnP6Or1qttc3e_L2zvrIVKIRjbdjbidRucaCsiG4isW2yqdH4zlVeYuCRUdo5dCCQqte-kPd51ufwWhbeOldMMqmEysnl88igkvdNNr14RkkkuYOmVK_RqBioBk8meNscIfCHvWrcb1wfcQQpMmze1vwf-bMo5BxsqtjxJAuCX8cESi-g1pHzYSZo1eoiCqG322VNA.qSpSVQZ2RjFdDdxt.xU-EtWVJH8cj0iLvplwrv6tF0RMVgm5ZbvQW4dbZBu9uLYIz3nPhZblXlxhupKyCjbW4MtNaCGxy-D7FviyvdRO5UR2uPk54RXIheuZ2GLHtq8NxIgG6QERpVLYDT5rNTIb5KrxNox5d2fh8SKaIM2qF.L6YG90yGR-wcXMMNc5DHmw
+              </encryptedData>
+              <cardAddress>
+                <address>
+                  <firstName>Jim</firstName>
+                  <lastName>Smith</lastName>
+                  <street>456 My Street</street>
+                  <houseName>Apt 1</houseName>
+                  <postalCode>K1C2N6</postalCode>
+                  <city>Ottawa</city>
+                  <state>ON</state>
+                  <countryCode>CA</countryCode>
+                  <telephoneNumber>(555)555-5555</telephoneNumber>
+                </address>
+              </cardAddress>
+            </CSE-DATA>
             <session id="asfasfasfasdgvsdzvxzcvsd" shopperIPAddress="127.0.0.1"/>
           </paymentDetails>
           <shopper>
